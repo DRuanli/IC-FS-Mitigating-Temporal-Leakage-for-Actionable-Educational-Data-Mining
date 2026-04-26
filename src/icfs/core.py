@@ -186,6 +186,49 @@ def actionability_ratio(selected_features: List[str],
     return float(np.mean(weights))
 
 
+def actionability_ratio_available(
+    selected_features: List[str],
+    horizon: int,
+    taxonomy: Dict[str, FeatureProfile] = None,
+    weights: Dict[Tier, float] = None,
+) -> float:
+    """
+    AR_available = |S_actionable ∩ S_available_at_h| / |S|
+
+    The CORRECT intervention utility ratio for deployment.
+    Unlike actionability_ratio(), this function zeros out the
+    contribution of any feature that is temporally unavailable at `horizon`,
+    regardless of its pedagogical actionability in theory.
+
+    This eliminates the TVS tautology: a feature that is actionable but
+    not yet observable at horizon h has zero practical intervention value.
+
+    Args:
+        selected_features: List of selected feature names.
+        horizon: Deployment time point (0, 1, 2).
+        taxonomy: Feature taxonomy (defaults to TAXONOMY_UCI).
+        weights: Actionability weights per Tier (defaults to ACTIONABILITY_WEIGHTS).
+
+    Returns:
+        Float in [0, 1]. Returns 0.0 if selected_features is empty.
+    """
+    if not selected_features:
+        return 0.0
+    tax = taxonomy if taxonomy is not None else TAXONOMY_UCI
+    w   = weights  if weights  is not None else ACTIONABILITY_WEIGHTS
+
+    scores = []
+    for f in selected_features:
+        # Gate 1: Is the feature available at this horizon?
+        if not get_temporal_availability(f, horizon, tax):
+            scores.append(0.0)
+            continue
+        # Gate 2: Is it pedagogically actionable?
+        scores.append(get_actionability_score(f, tax, w))
+
+    return float(np.mean(scores))
+
+
 def temporal_validity_score(selected_features: List[str],
                              horizon: int,
                              taxonomy: Dict[str, FeatureProfile] = None) -> float:
@@ -215,6 +258,52 @@ def compute_ius_geo(f1: float,
     tvs = temporal_validity_score(selected_features, horizon, taxonomy)
     prod = max(f1 * ar * tvs, 0.0)
     return prod ** (1/3)
+
+
+def compute_ius_deploy(
+    f1_deploy: float,
+    selected_features: List[str],
+    horizon: int,
+    taxonomy: Dict[str, FeatureProfile] = None,
+) -> float:
+    """
+    IUS_deploy = F1_deploy × AR_available   (Path A — the clean formulation)
+
+    Both components are independent:
+      - f1_deploy: predictive outcome under DRE masking protocol
+      - AR_available: structural audit via set intersection (actionable ∩ available)
+
+    This replaces the original compute_ius() which used F1 × AR × TVS,
+    where TVS was always 1.0 due to the hard temporal filter applied upstream.
+
+    Args:
+        f1_deploy: F1-score from DRE evaluation (features masked if unavailable).
+        selected_features: Final selected feature set.
+        horizon: Deployment time point.
+        taxonomy: Feature taxonomy.
+
+    Returns:
+        Float in [0, 1].
+    """
+    ar_avail = actionability_ratio_available(selected_features, horizon, taxonomy)
+    return f1_deploy * ar_avail
+
+
+def compute_ius_paper(
+    f1_paper: float,
+    selected_features: List[str],
+    horizon: int,
+    taxonomy: Dict[str, FeatureProfile] = None,
+) -> float:
+    """
+    IUS_paper = F1_paper × AR   (old metric, retained for comparison logging)
+
+    Kept to allow direct demonstration of the gap between the inflated
+    paper-style IUS and the deployment-honest IUS in the results tables.
+    TVS is intentionally excluded here (it was always 1.0 anyway).
+    """
+    ar = actionability_ratio(selected_features, taxonomy)
+    return f1_paper * ar
 
 
 # ── FIX A5: External metrics to avoid circular evaluation ────────────────────

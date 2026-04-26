@@ -68,6 +68,41 @@ def fit_predict_f1(X_tr, y_tr, X_te, y_te, sel_idx, random_state):
     return f1_score(y_te, y_pred, average='weighted', zero_division=0)
 
 
+def precision_recall_at_top_k(y_true, y_proba, top_k_pct=0.20):
+    """
+    Compute precision and recall at top k% of predictions.
+
+    Args:
+        y_true: True labels (1 = at-risk, 0 = not at-risk)
+        y_proba: Predicted probabilities for at-risk class
+        top_k_pct: Fraction of population to intervene on
+
+    Returns:
+        precision, recall at top k%
+    """
+    n = len(y_true)
+    k = int(n * top_k_pct)
+    if k == 0:
+        return 0.0, 0.0
+
+    # Sort by predicted risk (descending)
+    sorted_idx = np.argsort(y_proba)[::-1]
+    top_k_idx = sorted_idx[:k]
+
+    # Students predicted at-risk in top k
+    y_pred_topk = y_true[top_k_idx]
+
+    # Precision: of students we intervene on, what fraction are truly at-risk?
+    tp = y_pred_topk.sum()
+    precision = tp / k
+
+    # Recall: of all at-risk students, what fraction did we capture?
+    total_at_risk = y_true.sum()
+    recall = tp / total_at_risk if total_at_risk > 0 else 0.0
+
+    return precision, recall
+
+
 def select_best_ius(X_tr, y_tr, X_te, y_te, names, horizon, random_state,
                       apply_temporal_filter: bool):
     """Run IC-FS α-sweep and return best-IUS selection.
@@ -109,7 +144,12 @@ def select_best_ius(X_tr, y_tr, X_te, y_te, names, horizon, random_state,
 
 def evaluate_under_dre(X_tr, y_tr, X_te, y_te, selected_features, horizon,
                          names, random_state):
-    """Mask temporally-unavailable selected features, retrain, evaluate."""
+    """Mask temporally-unavailable selected features, retrain, evaluate.
+
+    Returns:
+        f1: weighted F1 score
+        y_proba: predicted probabilities for at-risk class (for Precision@k)
+    """
     sel_idx = [names.index(f) for f in selected_features]
     X_tr_s = X_tr[:, sel_idx].astype(np.float64).copy()
     X_te_s = X_te[:, sel_idx].astype(np.float64).copy()
@@ -126,7 +166,9 @@ def evaluate_under_dre(X_tr, y_tr, X_te, y_te, selected_features, horizon,
                                   n_jobs=-1, class_weight='balanced')
     rf.fit(X_tr_s, y_tr)
     y_pred = rf.predict(X_te_s)
-    return f1_score(y_te, y_pred, average='weighted', zero_division=0)
+    y_proba = rf.predict_proba(X_te_s)[:, 1] if len(rf.classes_) > 1 else y_pred.astype(float)
+    f1 = f1_score(y_te, y_pred, average='weighted', zero_division=0)
+    return f1, y_proba
 
 
 def run_one_seed(df_raw, seed, horizon):
@@ -154,10 +196,14 @@ def run_one_seed(df_raw, seed, horizon):
         + 1e-10)
 
     # DRE: mask + retrain + evaluate
-    f1_full_deploy = evaluate_under_dre(X_tr, y_tr, X_te, y_te,
-                                           sel_full, horizon, names, seed)
-    f1_notemp_deploy = evaluate_under_dre(X_tr, y_tr, X_te, y_te,
-                                             sel_notemp, horizon, names, seed)
+    f1_full_deploy, y_proba_full = evaluate_under_dre(X_tr, y_tr, X_te, y_te,
+                                                         sel_full, horizon, names, seed)
+    f1_notemp_deploy, y_proba_notemp = evaluate_under_dre(X_tr, y_tr, X_te, y_te,
+                                                             sel_notemp, horizon, names, seed)
+
+    # Intervention metrics (Precision@20%, Recall@20%)
+    prec20_full, rec20_full = precision_recall_at_top_k(y_te, y_proba_full, 0.20)
+    prec20_notemp, rec20_notemp = precision_recall_at_top_k(y_te, y_proba_notemp, 0.20)
 
     # ─── EXISTING: paper-style AR (unchanged for comparison) ───
     ar_full = actionability_ratio(sel_full, TAXONOMY_OULAD)
@@ -195,6 +241,11 @@ def run_one_seed(df_raw, seed, horizon):
         "f1_notemp_paper": f1_notemp_paper * 100,
         "f1_full_deploy": f1_full_deploy * 100,
         "f1_notemp_deploy": f1_notemp_deploy * 100,
+        # Intervention metrics (NEW)
+        "precision20_full_deploy": prec20_full * 100,
+        "recall20_full_deploy": rec20_full * 100,
+        "precision20_notemp_deploy": prec20_notemp * 100,
+        "recall20_notemp_deploy": rec20_notemp * 100,
         # AR: old (for comparison) and new (for primary reporting)
         "AR_full": ar_full,
         "AR_notemp": ar_notemp,  # Old: inflated at h=0

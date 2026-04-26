@@ -89,9 +89,11 @@ def build_oulad_taxonomy() -> Dict[str, FeatureProfile]:
         FeatureProfile("date_registration", Tier.PRE_SEMESTER, [0, 1, 2],
             "Days before module start when student registered",
             "Early registration nudge; institution can intervene via comms"),
-        FeatureProfile("date_unregistration", Tier.PRE_SEMESTER, [0, 1, 2],
-            "Days to unregistration (if any)",
-            "Leading indicator of withdrawal intent; retention intervention"),
+        # CRITICAL FIX: date_unregistration is FUTURE at h=0 for students who withdraw later
+        # Only valid at h≥1 where early withdrawals have already occurred
+        FeatureProfile("date_unregistration", Tier.PRE_SEMESTER, [1, 2],
+            "Days to unregistration if occurred before horizon",
+            "Only valid at h≥1; temporal leakage at h=0 for future withdrawals"),
 
         # ── TIER 2: During-semester observable (aggregated to horizon) ────────
         # Clickstream features — key early-warning signals

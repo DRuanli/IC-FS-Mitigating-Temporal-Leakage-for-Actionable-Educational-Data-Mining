@@ -52,6 +52,41 @@ TOP_K = 15
 N_TREES = 60
 
 
+def precision_recall_at_top_k(y_true, y_proba, top_k_pct=0.20):
+    """
+    Compute precision and recall at top k% of predictions.
+
+    Args:
+        y_true: True labels (1 = at-risk, 0 = not at-risk)
+        y_proba: Predicted probabilities for at-risk class
+        top_k_pct: Fraction of population to intervene on
+
+    Returns:
+        precision, recall at top k%
+    """
+    n = len(y_true)
+    k = int(n * top_k_pct)
+    if k == 0:
+        return 0.0, 0.0
+
+    # Sort by predicted risk (descending)
+    sorted_idx = np.argsort(y_proba)[::-1]
+    top_k_idx = sorted_idx[:k]
+
+    # Students predicted at-risk in top k
+    y_pred_topk = y_true[top_k_idx]
+
+    # Precision: of students we intervene on, what fraction are truly at-risk?
+    tp = y_pred_topk.sum()
+    precision = tp / k
+
+    # Recall: of all at-risk students, what fraction did we capture?
+    total_at_risk = y_true.sum()
+    recall = tp / total_at_risk if total_at_risk > 0 else 0.0
+
+    return precision, recall
+
+
 # ─── Baseline 1: NSGA-II MOFS ─────────────────────────────────────────────
 from pymoo.algorithms.moo.nsga2 import NSGA2
 from pymoo.core.problem import ElementwiseProblem
@@ -147,7 +182,11 @@ def run_nsga2(X_tr, y_tr, X_te, y_te, names, horizon,
         clf_deploy = clone(final_clf)
         clf_deploy.fit(X_tr_deploy, y_tr)
         y_pred_deploy = clf_deploy.predict(X_te_deploy)
+        y_proba_deploy = clf_deploy.predict_proba(X_te_deploy)[:, 1] if len(clf_deploy.classes_) > 1 else y_pred_deploy.astype(float)
         f1_deploy = f1_score(y_te, y_pred_deploy, average='weighted', zero_division=0)
+
+        # Intervention metrics
+        prec20, rec20 = precision_recall_at_top_k(y_te, y_proba_deploy, 0.20)
 
         ar = actionability_ratio(sel, TAXONOMY_OULAD)
         ar_avail = actionability_ratio_available(sel, horizon, TAXONOMY_OULAD)
@@ -156,6 +195,7 @@ def run_nsga2(X_tr, y_tr, X_te, y_te, names, horizon,
         ius_deploy = compute_ius_deploy(f1_deploy, sel, horizon, TAXONOMY_OULAD)
 
         cand = {"accuracy": acc * 100, "f1_paper": f1 * 100, "f1_deploy": f1_deploy * 100,
+                 "precision20_deploy": prec20 * 100, "recall20_deploy": rec20 * 100,
                  "AR": ar, "AR_available": ar_avail, "TVS": tvs,
                  "IUS_paper": ius_paper * 100, "IUS_deploy": ius_deploy * 100,
                  "n_features": int(mask.sum()),
@@ -229,7 +269,11 @@ def run_stability_selection(X_tr, y_tr, X_te, y_te, names, horizon,
     rf_deploy = clone(rf)
     rf_deploy.fit(X_tr_deploy, y_tr)
     y_pred_deploy = rf_deploy.predict(X_te_deploy)
+    y_proba_deploy = rf_deploy.predict_proba(X_te_deploy)[:, 1] if len(rf_deploy.classes_) > 1 else y_pred_deploy.astype(float)
     f1_deploy = f1_score(y_te, y_pred_deploy, average='weighted', zero_division=0)
+
+    # Intervention metrics
+    prec20, rec20 = precision_recall_at_top_k(y_te, y_proba_deploy, 0.20)
 
     ar = actionability_ratio(sel, TAXONOMY_OULAD)
     ar_avail = actionability_ratio_available(sel, horizon, TAXONOMY_OULAD)
@@ -239,6 +283,7 @@ def run_stability_selection(X_tr, y_tr, X_te, y_te, names, horizon,
 
     return {"method": "StabilitySelection", "horizon": horizon,
              "accuracy": acc * 100, "f1_paper": f1 * 100, "f1_deploy": f1_deploy * 100,
+             "precision20_deploy": prec20 * 100, "recall20_deploy": rec20 * 100,
              "AR": ar, "AR_available": ar_avail, "TVS": tvs,
              "IUS_paper": ius_paper * 100, "IUS_deploy": ius_deploy * 100,
              "n_features": len(sel),
@@ -307,7 +352,11 @@ def run_boruta(X_tr, y_tr, X_te, y_te, names, horizon, max_iter=40):
     rf_deploy = clone(rf)
     rf_deploy.fit(X_tr_deploy, y_tr)
     y_pred_deploy = rf_deploy.predict(X_te_deploy)
+    y_proba_deploy = rf_deploy.predict_proba(X_te_deploy)[:, 1] if len(rf_deploy.classes_) > 1 else y_pred_deploy.astype(float)
     f1_deploy = f1_score(y_te, y_pred_deploy, average='weighted', zero_division=0)
+
+    # Intervention metrics
+    prec20, rec20 = precision_recall_at_top_k(y_te, y_proba_deploy, 0.20)
 
     ar = actionability_ratio(sel, TAXONOMY_OULAD)
     ar_avail = actionability_ratio_available(sel, horizon, TAXONOMY_OULAD)
@@ -317,6 +366,7 @@ def run_boruta(X_tr, y_tr, X_te, y_te, names, horizon, max_iter=40):
 
     return {"method": "Boruta", "horizon": horizon,
              "accuracy": acc * 100, "f1_paper": f1 * 100, "f1_deploy": f1_deploy * 100,
+             "precision20_deploy": prec20 * 100, "recall20_deploy": rec20 * 100,
              "AR": ar, "AR_available": ar_avail, "TVS": tvs,
              "IUS_paper": ius_paper * 100, "IUS_deploy": ius_deploy * 100,
              "n_features": len(sel),

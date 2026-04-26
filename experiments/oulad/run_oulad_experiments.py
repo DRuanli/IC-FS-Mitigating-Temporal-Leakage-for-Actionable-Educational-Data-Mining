@@ -1,146 +1,180 @@
 """
-Run IC-FS on OULAD dataset for all prediction horizons.
+================================================================================
+IC-FS on OULAD — Main α-sweep experiment (multi-seed)
+================================================================================
+Runs IC-FS at all horizons (t=0, t=1, t=2) with multiple random seeds.
+This is the primary "headline numbers" experiment.
 
-This script:
-1. Loads pre-processed OULAD features from parquet files
-2. One-hot encodes categorical variables
-3. Runs IC-FS with OULAD taxonomy
-4. Saves results to CSV files
+Outputs:
+  - results/oulad/oulad_icfs_h{0,1,2}.csv         (single-seed=42, full sweep)
+  - results/oulad/oulad_icfs_multi_h{0,1,2}.csv   (multi-seed best-IUS rows)
 
-Expected runtime: ~10-15 minutes per horizon on laptop.
+Runtime: ~10-15 min per horizon (single seed) or ~80-120 min (8 seeds × 3 h)
+
+Usage:
+    # Single seed, all horizons (default — for quick reference)
+    python experiments/oulad/run_oulad_experiments.py
+
+    # Multi-seed mode for ESWA submission
+    python experiments/oulad/run_oulad_experiments.py --multi-seed
+
+    # Single horizon
+    python experiments/oulad/run_oulad_experiments.py --horizon 1
+================================================================================
 """
 
-import pandas as pd
-import numpy as np
+from __future__ import annotations
+import argparse
 import sys
+import time
+import warnings
 from pathlib import Path
+
+import numpy as np
+import pandas as pd
 from sklearn.model_selection import train_test_split
 
-# Add project root to path
-project_root = Path(__file__).parent.parent.parent
+warnings.filterwarnings("ignore")
+
+project_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(project_root))
+sys.path.insert(0, str(project_root / "src"))
 
-from oulad_taxonomy import TAXONOMY_OULAD
-from ic_fs_v2 import ICFSPipeline
+from icfs.core import ICFSPipeline
+from icfs.taxonomy_oulad import TAXONOMY_OULAD
+from preprocess_oulad import preprocess_oulad, load_oulad_horizon
 
-def preprocess_oulad(df, horizon):
-    """
-    Preprocess OULAD features for IC-FS.
+DEFAULT_SEEDS = [42, 123, 456, 789, 1011, 2024, 3033, 4044]
+ALPHA_GRID = [0.0, 0.25, 0.5, 0.75, 1.0]
+TOP_K = 15
+N_BOOT = 20
 
-    Args:
-        df: DataFrame from oulad_features_h{horizon}.parquet
-        horizon: 0, 1, or 2
 
-    Returns:
-        X: numpy array of features
-        y: numpy array of targets
-        feature_names: list of feature names after one-hot encoding
-    """
-    df = df.copy()
+def run_one_horizon_one_seed(df_raw, horizon: int, seed: int):
+    """Single (horizon, seed) IC-FS sweep. Returns full results DataFrame
+    plus selected-features dict for downstream DRE."""
+    X, y, names = preprocess_oulad(df_raw)
+    X_tr, X_te, y_tr, y_te = train_test_split(
+        X, y, test_size=0.2, random_state=seed, stratify=y)
 
-    # Extract target
-    y = df.pop('y').values
+    pipe = ICFSPipeline(
+        horizon=horizon,
+        top_k=TOP_K,
+        n_bootstrap=N_BOOT,
+        taxonomy=TAXONOMY_OULAD,
+        alpha_values=ALPHA_GRID,
+    )
+    pipe.fit(X_tr, y_tr, X_te, y_te, names, verbose=False)
+    return pipe.to_dataframe(), pipe.best_by_ius()
 
-    # Drop metadata columns not used for prediction
-    drop_cols = ['id_student', 'student_key', 'horizon_cutoff',
-                  'module_presentation_length', 'final_result']
-    df = df.drop(columns=[c for c in drop_cols if c in df.columns])
 
-    # One-hot encode categorical variables
-    # These will create features like gender_M, gender_F, region_Scotland, etc.
-    cat_cols = ['gender', 'region', 'highest_education', 'imd_band',
-                'age_band', 'disability', 'code_module', 'code_presentation']
+def run_single_seed_full_sweep(horizons, out_dir, seed=42):
+    """Original behaviour: single seed=42, full α-sweep written per horizon."""
+    print("=" * 80)
+    print(f"IC-FS on OULAD | Single-seed mode (seed={seed})")
+    print("=" * 80)
 
-    df = pd.get_dummies(df, columns=[c for c in cat_cols if c in df.columns])
+    for h in horizons:
+        print(f"\n{'─'*80}")
+        print(f"HORIZON t={h}")
+        print(f"{'─'*80}")
 
-    # Convert date_registration and date_unregistration
-    # '?' means not available - convert to NaN then fill
-    for col in ['date_registration', 'date_unregistration']:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
+        df_raw = load_oulad_horizon(h)
+        print(f"[Load] {len(df_raw)} enrollments")
 
-    # Fill NaN values with 0 (conservative approach)
-    # For Tier-3 assessment scores, NaN at early horizons is expected
-    df = df.fillna(0)
+        t0 = time.time()
+        results_df, best_sol = run_one_horizon_one_seed(df_raw, h, seed)
+        print(f"[Done] {time.time()-t0:.0f}s")
 
-    # Remove zero-variance features (can cause numerical issues)
-    variances = df.var()
-    zero_var_features = variances[variances == 0].index.tolist()
-    if zero_var_features:
-        print(f"  Removing {len(zero_var_features)} zero-variance features")
-        df = df.drop(columns=zero_var_features)
+        out_path = out_dir / f"oulad_icfs_h{h}.csv"
+        results_df.to_csv(out_path, index=False)
+        print(f"  Saved {out_path}")
+        print(f"  Best α={best_sol.alpha:.2f}  F1={best_sol.f1*100:.2f}  "
+               f"AR={best_sol.ar:.3f}  IUS={best_sol.ius*100:.2f}  "
+               f"Stab={best_sol.stability:.3f}")
+        print(f"  Top-5 features: {best_sol.selected_features[:5]}")
 
-    print(f"  Preprocessed shape: {df.shape}")
-    print(f"  Feature count after one-hot: {df.shape[1]}")
 
-    return df.values, y, df.columns.tolist()
+def run_multi_seed(horizons, seeds, out_dir):
+    """Multi-seed mode: for each (horizon, seed) record best-IUS row."""
+    print("=" * 80)
+    print(f"IC-FS on OULAD | Multi-seed mode (n={len(seeds)})")
+    print("=" * 80)
+
+    for h in horizons:
+        print(f"\n{'─'*80}")
+        print(f"HORIZON t={h}")
+        print(f"{'─'*80}")
+
+        df_raw = load_oulad_horizon(h)
+        print(f"[Load] {len(df_raw)} enrollments")
+
+        rows = []
+        for s in seeds:
+            t_s = time.time()
+            try:
+                results_df, best_sol = run_one_horizon_one_seed(df_raw, h, s)
+                rows.append({
+                    "seed": s, "horizon": h,
+                    "alpha_best": best_sol.alpha,
+                    "accuracy": best_sol.accuracy * 100,
+                    "f1": best_sol.f1 * 100,
+                    "AR": best_sol.ar,
+                    "TVS": best_sol.tvs,
+                    "IUS": best_sol.ius * 100,
+                    "IUS_geo": best_sol.ius_geo * 100,
+                    "n_features": best_sol.n_features,
+                    "stability": best_sol.stability,
+                    "prec_at_topk": best_sol.precision_at_topk,
+                    "recall_at_topk": best_sol.recall_at_topk,
+                    "cv_mean": best_sol.cv_mean * 100,
+                    "cv_std": best_sol.cv_std * 100,
+                    "selected": "|".join(best_sol.selected_features),
+                })
+                print(f"  seed={s:4d} ({time.time()-t_s:5.0f}s): "
+                       f"α*={best_sol.alpha:.2f} F1={best_sol.f1*100:5.2f} "
+                       f"AR={best_sol.ar:.3f} IUS={best_sol.ius*100:5.2f}")
+            except Exception as e:
+                print(f"  seed={s} FAILED: {e}")
+
+        df = pd.DataFrame(rows)
+        out_path = out_dir / f"oulad_icfs_multi_h{h}.csv"
+        df.to_csv(out_path, index=False)
+
+        if len(df) >= 2:
+            print(f"\n  Multi-seed summary (n={len(df)}):")
+            for col in ["f1", "AR", "IUS", "stability"]:
+                v = df[col].values
+                print(f"    {col:<10}: mean={v.mean():6.2f}  std={v.std(ddof=1):5.2f}  "
+                       f"95%CI=[{np.percentile(v,2.5):.2f}, {np.percentile(v,97.5):.2f}]")
+        print(f"  Saved {out_path}")
 
 
 def main():
-    """Run IC-FS on OULAD for all horizons."""
+    parser = argparse.ArgumentParser(description="IC-FS on OULAD")
+    parser.add_argument("--multi-seed", action="store_true",
+                          help="Run with all 8 seeds (for ESWA submission)")
+    parser.add_argument("--horizon", type=int, default=None,
+                          help="Run only one horizon (0, 1, or 2)")
+    parser.add_argument("--seed", type=int, default=42,
+                          help="Single-seed mode RNG seed (default 42)")
+    args = parser.parse_args()
 
-    print("="*80)
-    print("IC-FS on OULAD Dataset")
-    print("="*80)
+    out_dir = project_root / "results" / "oulad"
+    out_dir.mkdir(parents=True, exist_ok=True)
 
-    for h in [0, 1, 2]:
-        print(f"\n{'─'*80}")
-        print(f"HORIZON {h}")
-        print(f"{'─'*80}")
+    horizons = [args.horizon] if args.horizon is not None else [0, 1, 2]
 
-        # Load pre-processed features
-        input_file = project_root / f'results/oulad/oulad_features_h{h}.parquet'
-        print(f"\n[1/4] Loading {input_file}...")
-        df = pd.read_parquet(input_file)
-        print(f"  Loaded: {len(df)} students, {df.shape[1]} raw features")
-        print(f"  Target distribution: {df['y'].value_counts().to_dict()}")
-
-        # Preprocess
-        print(f"\n[2/4] Preprocessing...")
-        X, y, feature_names = preprocess_oulad(df, h)
-
-        # Train/test split with stratification
-        print(f"\n[3/4] Splitting data...")
-        X_tr, X_te, y_tr, y_te = train_test_split(
-            X, y, test_size=0.2, random_state=42, stratify=y
-        )
-        print(f"  Train: {len(X_tr)} samples")
-        print(f"  Test: {len(X_te)} samples")
-
-        # Run IC-FS
-        print(f"\n[4/4] Running IC-FS...")
-        print(f"  Horizon: {h}")
-        print(f"  top_k: 15")
-        print(f"  n_bootstrap: 20")
-        print(f"  alpha_values: [0.0, 0.25, 0.5, 0.75, 1.0]")
-
-        pipe = ICFSPipeline(
-            horizon=h,
-            top_k=15,                    # OULAD has more features than UCI
-            n_bootstrap=20,              # Balance between stability and runtime
-            taxonomy=TAXONOMY_OULAD,     # Critical: use OULAD taxonomy
-            alpha_values=[0.0, 0.25, 0.5, 0.75, 1.0]
-        )
-
-        pipe.fit(X_tr, y_tr, X_te, y_te, feature_names, verbose=True)
-
-        # Save results
-        output_file = project_root / f'results/oulad/oulad_icfs_h{h}.csv'
-        results_df = pipe.to_dataframe()
-        results_df.to_csv(output_file, index=False)
-
-        print(f"\n✓ Saved results to {output_file}")
-        print(f"  Best IUS: {results_df['IUS'].max():.2f}")
-        print(f"  Best α: {results_df.loc[results_df['IUS'].idxmax(), 'alpha']}")
+    if args.multi_seed:
+        run_multi_seed(horizons, DEFAULT_SEEDS, out_dir)
+    else:
+        run_single_seed_full_sweep(horizons, out_dir, seed=args.seed)
 
     print(f"\n{'='*80}")
-    print("DONE: IC-FS completed for all horizons")
-    print("="*80)
-    print("\nOutput files:")
-    print(f"  - {project_root}/results/oulad/oulad_icfs_h0.csv")
-    print(f"  - {project_root}/results/oulad/oulad_icfs_h1.csv")
-    print(f"  - {project_root}/results/oulad/oulad_icfs_h2.csv")
+    print("DONE")
+    print(f"{'='*80}")
+    print(f"Output dir: {out_dir}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

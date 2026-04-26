@@ -22,8 +22,11 @@ from utils_data import load_and_split
 from ic_fs_v2 import (
     TAXONOMY_UCI, Tier, _resolve_parent,
     feature_scores_for_selection, ic_fs_select,
-    actionability_ratio, temporal_validity_score,
-    compute_ius, compute_ius_geo, filter_by_horizon,
+    actionability_ratio, actionability_ratio_available,
+    temporal_validity_score,
+    compute_ius, compute_ius_geo,
+    compute_ius_deploy, compute_ius_paper,
+    filter_by_horizon,
 )
 
 RANDOM_STATE = 42
@@ -88,18 +91,22 @@ def run_config_full_fast(X_tr, y_tr, X_te, y_te, names, horizon, top_k=12,
         sel_local = [available.index(f) for f in selected]
         ev = _eval_subset(X_tr_a, y_tr, X_te_a, y_te, sel_local)
         ar  = actionability_ratio(selected, tax)
+        ar_avail = actionability_ratio_available(selected, horizon, tax)
         tvs = temporal_validity_score(selected, horizon, tax)
-        ius = compute_ius(ev["f1"], selected, horizon, tax)
+        ius_paper = compute_ius_paper(ev["f1"], selected, horizon, tax)
+        ius_deploy = compute_ius_deploy(ev["f1"], selected, horizon, tax)
         row = {
             "config": "IC-FS(full)", "horizon": horizon, "alpha_best": alpha,
             "accuracy": ev["accuracy"]*100, "f1": ev["f1"]*100,
-            "AR": ar, "TVS": tvs, "IUS": ius*100,
+            "AR": ar, "AR_available": ar_avail, "TVS": tvs,
+            "IUS_paper": ius_paper*100, "IUS_deploy": ius_deploy*100,
+            "IUS": ius_deploy*100,  # Use new metric as primary
             "n_features": len(selected),
             "cv_mean": ev["cv_mean"]*100, "cv_std": ev["cv_std"]*100,
             "selected": "|".join(selected), "_alpha": alpha,
             "_selected_list": selected,
         }
-        if best_row is None or row["IUS"] > best_row["IUS"]:
+        if best_row is None or row["IUS_deploy"] > best_row["IUS_deploy"]:
             best_row = row
 
     # Stability only at best α
@@ -124,19 +131,23 @@ def run_config_no_temporal_fast(X_tr, y_tr, X_te, y_te, names, horizon, top_k=12
         sel_local = [names.index(f) for f in selected]
         ev = _eval_subset(X_tr, y_tr, X_te, y_te, sel_local)
         ar  = actionability_ratio(selected, tax)
+        ar_avail = actionability_ratio_available(selected, horizon, tax)
         tvs = temporal_validity_score(selected, horizon, tax)
-        ius = compute_ius(ev["f1"], selected, horizon, tax)
+        ius_paper = compute_ius_paper(ev["f1"], selected, horizon, tax)
+        ius_deploy = compute_ius_deploy(ev["f1"], selected, horizon, tax)
         row = {
             "config": "IC-FS(-temporal)", "horizon": horizon, "alpha_best": alpha,
             "accuracy": ev["accuracy"]*100, "f1": ev["f1"]*100,
-            "AR": ar, "TVS": tvs, "IUS": ius*100,
+            "AR": ar, "AR_available": ar_avail, "TVS": tvs,
+            "IUS_paper": ius_paper*100, "IUS_deploy": ius_deploy*100,
+            "IUS": ius_deploy*100,  # Use new metric as primary
             "n_features": len(selected),
             "cv_mean": ev["cv_mean"]*100, "cv_std": ev["cv_std"]*100,
             "has_G1_G2": any(f in selected for f in ["G1", "G2"]),
             "selected": "|".join(selected),
             "_alpha": alpha, "_selected_list": selected,
         }
-        if best_row is None or row["IUS"] > best_row["IUS"]:
+        if best_row is None or row["IUS_deploy"] > best_row["IUS_deploy"]:
             best_row = row
     # For this config, stability on full feature space (no filter)
     best_row["stability"] = bootstrap_stability_single(
@@ -160,8 +171,10 @@ def run_config_no_action_fast(X_tr, y_tr, X_te, y_te, names, horizon, top_k=12,
     sel_local = [available.index(f) for f in selected]
     ev = _eval_subset(X_tr_a, y_tr, X_te_a, y_te, sel_local)
     ar  = actionability_ratio(selected, tax)
+    ar_avail = actionability_ratio_available(selected, horizon, tax)
     tvs = temporal_validity_score(selected, horizon, tax)
-    ius = compute_ius(ev["f1"], selected, horizon, tax)
+    ius_paper = compute_ius_paper(ev["f1"], selected, horizon, tax)
+    ius_deploy = compute_ius_deploy(ev["f1"], selected, horizon, tax)
 
     # Stability — still measure (with actionability=1.0)
     rng = np.random.RandomState(RANDOM_STATE + 200 + horizon)
@@ -182,7 +195,9 @@ def run_config_no_action_fast(X_tr, y_tr, X_te, y_te, names, horizon, top_k=12,
     return {
         "config": "IC-FS(-action)", "horizon": horizon, "alpha_best": np.nan,
         "accuracy": ev["accuracy"]*100, "f1": ev["f1"]*100,
-        "AR": ar, "TVS": tvs, "IUS": ius*100,
+        "AR": ar, "AR_available": ar_avail, "TVS": tvs,
+        "IUS_paper": ius_paper*100, "IUS_deploy": ius_deploy*100,
+        "IUS": ius_deploy*100,  # Use new metric as primary
         "n_features": len(selected),
         "cv_mean": ev["cv_mean"]*100, "cv_std": ev["cv_std"]*100,
         "stability": stab,
@@ -222,8 +237,10 @@ def run_config_hardfilter_fast(X_tr, y_tr, X_te, y_te, names, horizon, top_k=12,
     selected, top_idx = _defs_select(X_tr_a, y_tr, filtered)
     ev = _eval_subset(X_tr_a, y_tr, X_te_a, y_te, list(top_idx))
     ar  = actionability_ratio(selected, tax)
+    ar_avail = actionability_ratio_available(selected, horizon, tax)
     tvs = temporal_validity_score(selected, horizon, tax)
-    ius = compute_ius(ev["f1"], selected, horizon, tax)
+    ius_paper = compute_ius_paper(ev["f1"], selected, horizon, tax)
+    ius_deploy = compute_ius_deploy(ev["f1"], selected, horizon, tax)
 
     # Stability
     rng = np.random.RandomState(RANDOM_STATE + 300 + horizon)
@@ -242,7 +259,9 @@ def run_config_hardfilter_fast(X_tr, y_tr, X_te, y_te, names, horizon, top_k=12,
     return {
         "config": "HardFilter+DE-FS", "horizon": horizon, "alpha_best": np.nan,
         "accuracy": ev["accuracy"]*100, "f1": ev["f1"]*100,
-        "AR": ar, "TVS": tvs, "IUS": ius*100,
+        "AR": ar, "AR_available": ar_avail, "TVS": tvs,
+        "IUS_paper": ius_paper*100, "IUS_deploy": ius_deploy*100,
+        "IUS": ius_deploy*100,  # Use new metric as primary
         "n_features": len(selected),
         "cv_mean": ev["cv_mean"]*100, "cv_std": ev["cv_std"]*100,
         "stability": stab,
