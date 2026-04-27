@@ -2,32 +2,6 @@
 ================================================================================
 IC-FS v2: Intervention-Constrained Feature Selection (HARDENED)
 ================================================================================
-Thay đổi so với v1 (ic_fs_core.py):
-  A1. filter_by_horizon: unknown feature -> False (+ warning), không còn silent leakage
-  A2. get_actionability_score: unknown feature -> 0.0 conservative (+ warning)
-  A3. _bootstrap_stability: nhận bootstrap_seed độc lập cho mỗi lần gọi
-  A4. Thêm Wilcoxon test + bootstrap CI (statistical_tests.py)
-  A5. evaluate_with_external_metric(): metric không chứa AR để tránh circular eval
-  A6. Thêm get_actionability_score với tùy chọn strict=True (raise thay vì warn)
-  A7. Thêm precision_at_top_k_actionable() và top_k_intervention_hit_rate()
-
-Fixes applied after ESWA peer review (Defects #1–#7):
-  Fix #1. _compute_dre_f1(): asymmetric DRE — train on unmasked X_tr, mask
-           only X_te_deploy. Previously both sides were masked (overly pessimistic).
-  Fix #2. ICFSPipeline.fit() Phase 1: nested validation selects α* on a held-out
-           20% val split of X_train. Test set is NEVER seen during α selection.
-           best_by_ius() returns the solution at α*, not the test-set argmax.
-  Fix #3. ICFSPipeline.__init__: default alpha_values changed from
-           np.linspace(0,1,11) (11 values) to [0.0,0.25,0.5,0.75,1.0] (5 values)
-           to match Algorithm 1 in the paper. Callers may override as needed.
-  Fix #6. feature_scores_for_selection(): added `random_state` parameter threaded
-           to mutual_info_classif AND RandomForestClassifier. _bootstrap_stability()
-           now passes `random_state = bootstrap_seed + b_i` per iteration, so MI
-           and RF estimates are independently seeded across bootstrap draws.
-  Fix #7. compute_ius() (F1×AR×TVS): marked DEPRECATED with DeprecationWarning.
-           Not called by ICFSPipeline. Active metrics are compute_ius_deploy()
-           (primary) and compute_ius_paper() (inflated, retained for comparison).
-================================================================================
 """
 
 from __future__ import annotations
@@ -125,10 +99,6 @@ ACTIONABILITY_WEIGHTS = {
     Tier.PAST_GRADE:     0.0,
 }
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# FIX A1 + A2: Safer taxonomy lookup helpers
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _resolve_parent(feature_name: str, taxonomy: Dict[str, FeatureProfile]
                     ) -> Optional[FeatureProfile]:
@@ -346,9 +316,6 @@ def compute_ius_paper(
     ar = actionability_ratio(selected_features, taxonomy)
     return f1_paper * ar
 
-
-# ── FIX A5: External metrics to avoid circular evaluation ────────────────────
-
 def precision_at_top_k_actionable(y_true: np.ndarray,
                                     y_prob: np.ndarray,
                                     k_pct: float = 0.2) -> float:
@@ -390,8 +357,6 @@ def evaluate_with_external_metric(y_true: np.ndarray,
                                     taxonomy: Dict[str, FeatureProfile] = None,
                                     budget_pct: float = 0.2) -> dict:
     """
-    FIX A5: Đánh giá KHÔNG chứa AR — tránh circular.
-
     Returns dict với:
       - precision_at_topk: độ chính xác khi flag top-k% rủi ro cao
       - recall_at_topk   : recall/coverage trong fail thực tế
@@ -420,14 +385,6 @@ def feature_scores_for_selection(X: np.ndarray,
                                    ) -> pd.DataFrame:
     """
     Compute four-component ensemble feature scores for IC-FS selection.
-
-    FIX #6: The `random_state` parameter is now threaded through to both
-    `mutual_info_classif` and `RandomForestClassifier`.  When called from
-    _bootstrap_stability(), each bootstrap iteration passes a distinct seed
-    (bootstrap_seed + iteration_index), giving truly independent MI and RF
-    estimates across bootstrap draws.  Direct calls from fit() continue to
-    use the global RANDOM_STATE default, so non-bootstrap behaviour is
-    unchanged.
 
     Note on asymmetric scaling: chi-squared is computed on MinMax-scaled
     features (required — chi2 needs non-negative inputs); MI, Pearson
@@ -540,12 +497,6 @@ class ICFSPipeline:
         """
         Jaccard stability across B bootstrap resamples.
 
-        FIX #6: Each iteration now passes `random_state = bootstrap_seed + b_i`
-        to feature_scores_for_selection(), so the MI nearest-neighbour estimator
-        and the RF scorer receive a distinct seed on every draw.  Previously both
-        were fixed at RANDOM_STATE=42 across all B iterations, creating correlated
-        score estimates that mildly inflated Jaccard stability.
-
         The index-sampling RNG (np.random.RandomState(bootstrap_seed)) is kept
         separate from the scorer seeds so the two sources of randomness are
         independently controllable.
@@ -553,12 +504,11 @@ class ICFSPipeline:
         n = len(y)
         selected_sets = []
         rng = np.random.RandomState(bootstrap_seed)
-        for b_i in range(self.n_bootstrap):          # FIX #6: named index b_i
+        for b_i in range(self.n_bootstrap):
             idx = rng.choice(n, size=n, replace=True)
             X_bs, y_bs = X[idx], y[idx]
             if len(np.unique(y_bs)) < 2:
                 continue
-            # FIX #6: per-iteration seed = bootstrap_seed + b_i
             score_df = feature_scores_for_selection(
                 X_bs, y_bs, feature_names, self.taxonomy,
                 random_state=bootstrap_seed + b_i,
@@ -633,22 +583,6 @@ class ICFSPipeline:
              feature_names: List[str],
              verbose: bool = True,
              skip_stability: bool = False) -> "ICFSPipeline":
-        """
-        Fit IC-FS pipeline with two fixes applied:
-
-        FIX #1 — Asymmetric DRE masking (Defect #1):
-            clf_deploy now trains on UNMASKED X_tr; only X_te_deploy is masked.
-            Previously both X_tr_deploy and X_te_deploy were masked (overly
-            pessimistic and inconsistent with the paper's stated protocol).
-
-        FIX #2 — Nested validation for α selection (Defect #2):
-            PHASE 1 selects α* on a held-out 20% validation split of X_train.
-            The test set (X_test/y_test) is NEVER consulted during α selection.
-            PHASE 2 runs the full α-sweep on the complete train+test data for
-            logging and to populate self.solutions_ (so to_dataframe() and
-            best_by_f1() still work for the ablation sweep table in the paper).
-            best_by_ius() returns the solution at α* from Phase 1.
-        """
         # ── Temporal filter ───────────────────────────────────────────────────
         available = filter_by_horizon(feature_names, self.horizon, self.taxonomy)
         if not available:
