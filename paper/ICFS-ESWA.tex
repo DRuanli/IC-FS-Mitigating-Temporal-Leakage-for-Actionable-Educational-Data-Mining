@@ -1,0 +1,661 @@
+\documentclass[a4paper,fleqn]{cas-sc}
+\usepackage[authoryear,longnamesfirst]{natbib}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{algorithmicx}
+\usepackage{textcomp}
+\usepackage{wasysym}
+\usepackage{amssymb}
+
+%%%Author macros
+\def\tsc#1{\csdef{#1}{\textsc{\lowercase{#1}}\xspace}}
+\tsc{WGM}
+\tsc{QE}
+%%%
+
+% Uncomment and use as if needed
+%\newtheorem{theorem}{Theorem}
+%\newtheorem{lemma}[theorem]{Lemma}
+%\newdefinition{rmk}{Remark}
+%\newproof{pf}{Proof}
+%\newproof{pot}{Proof of Theorem \ref{thm}}
+
+\begin{document}
+\let\WriteBookmarks\relax
+\def\floatpagepagefraction{1}
+\def\textpagefraction{.001}
+
+% Short title
+\shorttitle{IC-FS: Intervention-Constrained Feature Selection}
+
+% Short author
+\shortauthors{N. Le, T. Lam, and K. Truong}
+
+% Main title of the paper
+\title [mode = title]{IC-FS: Intervention-Constrained Feature Selection for Deployment-Honest Early Warning Systems in Education}
+
+% Title footnote mark
+% eg: \tnotemark[1]
+%\tnotemark[1] 
+
+% Title footnote 1.
+% eg: \tnotetext[1]{Title footnote text}
+%\tnotetext[1]{} 
+
+% First author
+%
+% Options: Use if required
+% eg: \author[1,3]{Author Name}[type=editor,
+%       style=chinese,
+%       auid=000,
+%       bioid=1,
+%       prefix=Sir,
+%       orcid=0000-0000-0000-0000,
+%       facebook=<facebook id>,
+%       twitter=<twitter id>,
+%       linkedin=<linkedin id>,
+%       gplus=<gplus id>]
+
+\author[1]{Nguyen Le}[orcid=0009-0009-5517-9996]
+
+% Corresponding author indication
+\cormark[1]
+
+% Footnote of the first author
+%\fnmark[1]
+
+% Email id of the first author
+\ead{ledangnguyen.st@tdtu.edu.vn}
+
+% URL of the first author
+%\ead[url]{}
+
+% Credit authorship
+
+\credit{Conceptualization, Methodology, Formal analysis, Data curation, Visualization, Writing - original draft, Writing - review \& editing}
+
+% Address/affiliation
+\affiliation[1]{organization={Ton Duc Thang University},
+            city={Ho Chi Minh City}, 
+            country={Vietnam}}
+
+\author[2]{Tri Lam}%[]
+
+% Footnote of the second author
+%\fnmark[2]
+
+% Email id of the second author
+\ead{}
+
+% URL of the second author
+%\ead[url]{}
+
+% Credit authorship
+\credit{Validation, Investigation, Writing - review \& editing}
+
+% Address/affiliation
+\affiliation[2]{organization={University of Social Sciences and Humanities, Vietnam National University Ho Chi Minh City}, 
+            city={Ho Chi Minh City},
+            country={Vietnam}}
+
+\author[1]{Khang Truong}
+
+\ead{82200300@student.tdtu.edu.vn}
+
+\credit{Validation, Writing - review \& editing}
+
+% Corresponding author text
+\cortext[1]{Corresponding author}
+
+% Footnote text
+%\fntext[1]{}
+
+% For a title note without a number/mark
+%\nonumnote{}
+
+% Here goes the abstract
+\begin{abstract}
+Early Warning Systems (EWS) in education demonstrate a systematic limitation wherein feature selection algorithms identify features that appear actionable but rely on student behavioral data unavailable at deployment, a challenge defined as Behavioral Leakage. Existing evaluation metrics intensify this problem by assessing actionability using future-valued features, leading to the Illusion of Actionability. This study introduces Intervention-Constrained Feature Selection (IC-FS), which addresses both challenges through three mechanisms: a taxonomy-driven temporal filter that enforces a deployment-honest actionability ratio (ARavailable); a Deployment-Realistic Evaluation (DRE) protocol that retrains and re-evaluates models using train-mean imputation for temporally unavailable features, producing F1deploy; and the Intervention Utility Score (IUSdeploy = F1deploy x ARavailable), which jointly rewards predictive accuracy and temporal intervention feasibility. Experiments on the OULAD dataset quantify the severity of the issue: the unfiltered pipeline reports IUSpaper = 11.99 \textpm 0.27 at course start but yields IUSdeploy = 0.00 \textpm 0.00, with a leakage coefficient \taurus = 1.00, confirming that all claimed actionability is derived from future data. IC-FS eliminates this inflation (\taurus = 0.000), achieving F1deploy = 77.38 \textpm 0.42\%, ARavailable = 0.720 \textpm 0.000, and IUSdeploy = 55.71 \textpm 0.30 at the 25\%-elapsed horizon, outperforming NSGA-II-MOFS by 19.50 IUS points (53.9\%) and Boruta by 28.07 IUS points (101.5\%) on IUS, despite both achieving higher raw F1. Ablation studies show actionability weighting contributes a mean gain of 10.61 IUS points (23.5\% improvement) over pure predictive selection. The IC-FS framework, DRE protocol, and IUSdeploy metric are proposed as reusable audit standards for the educational data mining community.
+\end{abstract}
+
+% Use if graphical abstract is present
+%\begin{graphicalabstract}
+%\includegraphics{}
+%\end{graphicalabstract}
+
+% Research highlights
+\begin{highlights}
+\item Introduces Behavioral Leakage and the Illusion of Actionability --- two evaluation failures specific to educational early warning systems where feature selection algorithms select temporally unavailable features.
+\item Proposes IC-FS framework with taxonomy-driven temporal filtering, achieving zero leakage coefficient ($\tau = 0.000$) while standard methods exhibit complete leakage ($\tau = 1.000$) at course start.
+\item Deployment-Realistic Evaluation (DRE) protocol exposes the gap between paper metrics and deployment reality: methods reporting $IUS_{paper} = 11.99 \pm 0.27$ (8-seed mean, $h=0$) deliver $IUS_{deploy} = 0.00 \pm 0.00$, confirming that all  claimed actionability is drawn from features unavailable at deployment.
+\item Identifies $h=1$ (25\% module elapsed) as the optimal intervention window for asynchronous online courses, where actionable behavioral features first become available with sufficient predictive signal.
+\end{highlights}
+
+
+% Keywords
+% Each keyword is seperated by \sep
+\begin{keywords}
+ \sep Educational Early Warning System \sep Feature Selection \sep Behavioral Leakage \sep Intervention Utility \sep Learning Analytics \sep Temporal Data Leakage
+\end{keywords}
+
+\maketitle
+
+% Main text
+\section{Introduction}
+\label{sec:introduction}
+
+An early warning system that identifies at-risk students but prescribes ineffective or impractical interventions fails in its primary purpose. At best, it squanders opportunity; at worst, it promotes false institutional confidence. The main challenge in educational early warning research is aligning predictive accuracy with actionable implementation---an issue that conventional evaluation approaches do not fully address.
+
+Student success prediction has matured over the past decade. Systems leveraging VLE clickstream data, assessment patterns, and demographics now often reach weighted $F_1$ scores above 80\% at mid-course using large datasets \cite{hlosta2017, waheed2020}. The OULAD dataset \cite{kuzilek2017}, with over 32,000 student-module enrollments containing complete behavioral records, has become a standard benchmark. While results from OULAD and similar datasets are frequently cited to support the readiness of learning analytics tools for organizational adoption, recent studies highlight ongoing concerns regarding how these evaluation protocols model practical deployment risk. Consider a model trained and evaluated at course start---the point with maximum potential for intervention. If it selects \texttt{sum\_click\_to\_date} (total VLE clicks since course start) as key, it appears predictive (VLE engagement correlates closely with outcomes) and actionable (tutors might nudge low-engagement students). The model may report over 75\% accuracy and actionability ratios above 0.6, implying strong deployment readiness. Yet at the start of the course, no student has clicked anything; the feature does not practically exist. This means predictions are built on data unavailable until weeks into the course, missing the critical window for early intervention.
+
+We term this problem \textbf{Behavioral Leakage}: using features that represent future student behaviors, historically legitimate and predictive, but absent at prediction time. This differs from classical statistical data leakage \cite{kaufman2012, kapoor2023}, where the outcome directly corrupts the training data. It is also distinct from non-actionable features \cite{baker2014}, such as static demographics. Behavioral leakage involves actionable, predictive features that are simply not yet available. For example, considering the number of assignments a student has submitted by week four as an early predictor at week zero introduces behavioral leakage, because submission data is fundamentally unobservable at the start line. Standard train/test splits ignore the distinction between features fully observed at prediction time and those finalized later, allowing behavioral leakage to pass unnoticed. This leads to what we call the \textbf{Illusion of Actionability}: a model highlights features instructors could act on, even though such features---engagement metrics, submission counts, assessment scores---are future events at the deployment horizon. Thus, a recommendation to ``focus on students with low forum engagement'' at the start of the course cannot be acted upon because no students have participated. The reported actionability reflects an artifact of measuring temporal features without proper constraints. Solving these problems requires two advances absent in the existing literature: a metric for measuring deployment utility under temporal constraints, and a feature selection algorithm that targets this metric rather than just raw accuracy.
+
+The \textbf{IC-FS framework} applies three mechanisms to resolve this: (1) a taxonomy-driven temporal filter imposes hard availability constraints at selection, restricting features to those fully observed by the horizon and eliminating behavioral leakage; (2) a four-component ensemble scorer integrates predictive power with pedagogical actionability via a trade-off parameter, enabling a smooth transition between prediction and actionability; (3) a strict \textbf{Deployment-Realistic Evaluation (DRE)} protocol, wherein models are trained on complete historical data, but temporally unavailable features are masked with training-set means strictly during the inference stage, effectively simulating the exact ``blindness'' EWS face in deployment conditions.
+
+These mechanisms introduce two new metrics. The \textbf{deployment-honest actionability ratio} ($AR_{available}$) credits only features that are both actionable and temporally available. The \textbf{Intervention Utility Score} ($IUS_{deploy}$) combines deployment-realistic performance and actionability into a single interpretable score that is zero if either fails. Together, these metrics reveal problems that conventional evaluations conceal: if a method scores well on $IUS_{paper}$ but fails on $IUS_{deploy}$, it is operationally useless despite high reported accuracy.
+
+The contributions of this paper are as follows:
+\begin{itemize}
+    \item \textbf{Behavioral Leakage and the Illusion of Actionability} --- formal identification and operational definition of two evaluation failures specific to educational early warning systems, strictly separated from classical data leakage.
+    \item \textbf{$AR_{available}$ and $IUS_{deploy}$} --- two deployment-honest metrics grounded in temporal feature availability. These replace conventional ratios with definitions that are auditable, interpretable, and zero-inflatable by construction.
+    \item \textbf{IC-FS algorithm} --- a feature selection framework merging a taxonomy-enforced temporal filter, a continuous actionability--prediction trade-off, and inline DRE validation, producing selections that are both predictive and deployably actionable at a specified horizon.
+    \item \textbf{Deployment-Realistic Evaluation (DRE) protocol} --- a reusable evaluation standard for the EDM community that can be applied to audit the deployment honesty of any feature selection method.
+    \item \textbf{Empirical findings on OULAD} --- identifying $h=1$ (25\% module elapsed) as the optimal intervention window for asynchronous online courses, proving categorical IUS collapse at $h=0$ for unconstrained methods, and quantifying the actionability-accuracy trade-off across four methods and three horizons.
+\end{itemize}
+
+The structure of this paper is as follows. Section \ref{sec:related_work} reviews related work. Section \ref{sec:methodology} outlines the IC-FS methodology. Section \ref{sec:experiments} describes the experimental arrangement. Section \ref{sec:results} presents and analyzes the results. Section \ref{sec:discussion} addresses the implications, limitations, and future directions.
+
+\section{Related Work}
+\label{sec:related_work}
+
+\subsection{Educational Data Mining and Early Warning Systems}
+Educational data mining (EDM) employs computational techniques to analyze learning-related data, aiming to enhance the understanding and improvement of educational processes \cite{romero2020, baker2014}. Within this domain, predicting student success, particularly the early identification of at-risk learners, has been a central research focus for the past two decades \cite{kotsiantis2004, romero2010}. The rationale is that timely and accurate identification of at-risk students enables targeted institutional interventions, including tutoring, counseling, financial support, and engagement outreach, which can reduce dropout rates and academic failure on a large scale.
+
+Early systems, such as Course Signals at Purdue University \cite{arnold2012}, demonstrated institutional feasibility by integrating LMS activity, instructor interactions, and demographic indicators into a traffic-light risk system that improved student retention. Subsequent systems incorporated more complex data sources, including clickstream data from Virtual Learning Environments (VLE), assessment submission patterns, and temporal engagement metrics \cite{hlosta2017, wolff2013}. The OULAD dataset \cite{kuzilek2017} was introduced to facilitate reproducible research, offering comprehensive VLE clickstream data for over 32,000 student-module enrollments, as well as demographic and outcome information. Prediction models applied to OULAD, such as logistic regression, naive Bayes, gradient boosting, and deep learning approaches \cite{waheed2020}, have consistently achieved high accuracy at both mid-course and late-course prediction stages.
+
+Despite advancements in predictive modeling, a significant challenge persists: high reported accuracy does not necessarily translate into institutional capacity for effective intervention. Delen \cite{delen2010} observed that retention models often prioritize highly predictive demographic features, such as prior academic failure and socioeconomic status, which are not actionable by advisors. Jayaprakash et al. \cite{jayaprakash2014} highlighted the disconnect between generating risk scores and designing practical intervention workflows. Asif et al. \cite{asif2017} demonstrated that models achieving over 90\% accuracy on historical data frequently rely on features unavailable at the earliest, most critical prediction points. The field still lacks a formal metric to distinguish predictive power from deployment utility, leaving practitioners without a systematic approach to evaluate models for deployment readiness.
+
+\subsection{Feature Selection in Educational Prediction}
+Feature selection reduces model complexity, enhances generalization, and, within the context of early warning systems (EWS), directly influences which student attributes form the basis for interventions \cite{li2017}. Standard filter methods, such as chi-squared, mutual information, and correlation, score features based on their association with the outcome label. Wrapper methods, including recursive elimination and genetic algorithms, evaluate feature subsets by classification performance. Ensemble stability selection \cite{meinshausen2010} improves the reproducibility of selected feature sets across bootstrap samples, reducing variance in reported features.
+
+Multi-objective approaches have been developed to balance competing criteria in feature selection. NSGA-II \cite{deb2002} and its variants are used when accuracy, interpretability, sparsity, or cost must be optimized simultaneously. While NSGA-II enables explicit trade-off navigation among these objectives, it can yield solution sets with limited interpretability due to the complexity of Pareto fronts in high-dimensional spaces. Pes \cite{pes2020} conducted a stability analysis of ensemble feature selection in high-dimensional datasets, showing that Jaccard stability above 0.8 is achievable with sufficient bootstrap samples, but also emphasizing that stability depends heavily on data structure and algorithmic choices. The Boruta algorithm \cite{kursa2010} uses random forest importance scores, augmented with shadow features, to provide a statistically robust feature-relevance test, identifying all features with above-chance importance rather than only the top-$k$ features. However, Boruta may select large feature sets when data are highly correlated, complicating model interpretation and intervention design. Collectively, these methods underscore the need to assess both statistical properties and practical utility of selected feature sets in EWS contexts.
+
+A common limitation of these methods is their focus on optimizing accuracy using historical data, often overlooking whether selected features are available and actionable at the intended deployment point. M\'{a}rquez-Vera et al. \cite{marquez2016} investigated how prediction timing influences early dropout prediction performance but did not formalize constraints on temporal feature availability. Similarly, Conijn et al. \cite{conijn2017} identified VLE features from the initial weeks as highly actionable but did not propose algorithmic approaches to enforce early feature availability. Xing et al. \cite{xing2016} reported that predictive accuracy declines substantially at early prediction horizons in MOOCs, where maximizing intervention lead time is essential. Collectively, these studies highlight a significant gap: the absence of methods to ensure the temporal availability and practical actionability of selected features. This paper addresses this gap by introducing a principled approach for deployment-viable feature selection.
+
+\subsection{Temporal Leakage and Evaluation Integrity}
+Data leakage, defined as the inadvertent inclusion of outcome-informative information during training or evaluation that would not be available at deployment, poses a significant threat to reproducibility in machine learning \cite{kaufman2012, kapoor2023}. Common forms include preprocessing the entire dataset before train/test splitting, feature engineering that incorporates future data, and target encoding without sufficient isolation. In the EDM context, temporal leakage has been partially addressed by distinguishing between static and dynamic features \cite{hlosta2017}. However, the specific issue of features that are actionable but not yet generated, termed \textbf{behavioral leakage} in this paper, has not been explicitly defined or systematically addressed. The most relevant prior work distinguishes between predictive and causal features in interpretable machine learning: features that predict an outcome are not always those that, if modified, would change the outcome \cite{ustun2019}. This body of research has led to counterfactual explanatory methods that grant actionable recourse for individual decisions. However, while the recourse literature focuses on causal actionability---whether a feature value can be changed to improve outcomes---this paper considers \textbf{temporal actionability}, which concerns whether a feature value is available at the time of prediction. These two forms of actionability are orthogonal, and both are essential for designing early warning systems that are fit for deployment.
+
+Hussain et al. \cite{hussain2018} demonstrated that engagement predictions using VLE data collected before the 10th day of a course yield significantly lower $F_1$ scores compared to models trained on full-course data. They proposed separate models for each time window, implicitly acknowledging the temporal structure issue, but did not establish a unified evaluation standard. The lack of a standardized protocol for temporal validity auditing has significant consequences: it obscures whether models with high reported accuracy would maintain similar predictive performance in real-world implementation, may result in inflated claims of model effectiveness, and undermines the credibility of early warning system research.
+
+\subsection{Actionability and Intervention Utility in Machine Learning}
+The issue of whether a model's outputs can be acted upon has become increasingly important in the fairness, accountability, and transparency community. Ustun et al. \cite{ustun2019} introduced actionable recourse as a formal criterion: given a classification decision, there exists a set of feature changes within the individual's control that would alter the prediction. This definition primarily addresses post-hoc explanation---identifying changes that would benefit an individual---rather than feature selection, which concerns the choice of features during model development.
+
+In educational research, actionability is often discussed informally as a desirable property for EWS features; for instance, models should prioritize \texttt{study\_hours} over \texttt{parent\_education} because advisors can influence the former but not the latter \cite{baker2014}. Siemens \& Baker \cite{siemens2012} emphasized that learning analytics should ultimately support human decision-making, indicating that actionable features deserve prioritization. However, this criterion has not been formally incorporated into feature selection objective functions or evaluation metrics. Consequently, when studies report high actionability fractions, they typically refer to \textit{pedagogical potential}---the theoretical capacity of a feature to inform intervention if it were available. This concept is distinct from \textit{deployment reality}, which concerns whether a feature is actually available and modifiable at the time when prediction and intervention are required.
+
+This gap motivates the introduction of the Intervention Utility Score (IUS) metric in this paper. The most comparable existing composite metric is the product of accuracy and actionability, which has been reported informally in several EWS studies but lacks a formal definition. The innovation of $IUS_{deploy}$ lies in its computation of both components under deployment-realistic conditions: $F_1{deploy}$ is obtained from DRE-masked evaluation, and $AR_{available}$ is calculated using strict temporal set intersection. This approach eliminates the circular inflation that arises when actionability is assessed using future feature values.
+
+
+%% ============================================================
+%%  Section III — Proposed Methodology
+%%  Drop this block into ICFS-ESWA.tex before \section{Related Work}
+%% ============================================================
+
+\section{Proposed Methodology}
+\label{sec:methodology}
+
+\subsection{Problem Formulation}
+
+Let $\mathcal{D} = \{(x_i, y_i)\}_{i=1}^{N}$ be a student dataset where $x_i \in \mathbb{R}^P$ is a feature vector and $y_i \in \{0, 1\}$ is the binary outcome (at-risk / not at-risk). Let $h \in \{0, 1, \ldots, H\}$ denote a prediction horizon, where $h=0$ corresponds to course start and larger $h$ values correspond to later prediction points. Let $\mathcal{F} = \{f_1, \ldots, f_P\}$ be the full feature set.
+
+We define the \textbf{temporal availability function} $\delta: \mathcal{F} \times \mathbb{N} \to \{0,1\}$ such that $\delta(f, h) = 1$ if and only if feature $f$ has been fully observed for all students by horizon $h$. The \textbf{actionability weight function} $\omega: \mathcal{F} \to [0,1]$ assigns each feature a weight reflecting the pedagogical feasibility of institutional intervention on that feature.
+
+The goal is to select a feature subset $S \subseteq \mathcal{F}$ that maximises both predictive accuracy and deployment utility --- i.e., the ability of a trained model to support actionable interventions when deployed at horizon $h$. Standard feature selection maximises predictive accuracy without regard to $\delta$ or $\omega$, producing the problems identified in this paper. IC-FS enforces both constraints jointly.
+
+\subsection{Feature Taxonomy}
+
+The taxonomy partitions features into four tiers based on their temporal availability profile and actionability level. Each feature is registered as a \texttt{FeatureProfile} object with fields: \texttt{name}, \texttt{tier}, \texttt{available\_at} (list of horizons), \texttt{description}, and \texttt{educational\_rationale}.
+
+\textbf{Tier 0 --- Non-Actionable Demographic and Structural Features} ($\omega = 0.0$): Fixed attributes such as gender, socioeconomic status (IMD band), region, disability status, and module/presentation identifiers. These are available at all horizons ($\delta(f, h) = 1$ for all $h$) but carry zero actionability weight, as neither students nor institutions can modify them for intervention purposes.
+
+\textbf{Tier 1 --- Pre-Semester Actionable Features} ($\omega = 1.0$): Features reflecting choices or conditions that can be influenced before or at course start. In OULAD, this reduces to registration timing (\texttt{date\_registration}). In UCI, it includes study hours, school support, family support, extracurricular activities, and internet access. These features are available at all horizons.
+
+\textbf{Tier 2 --- Mid-Semester Behavioural Features} ($\omega = 0.7$): Features generated by ongoing student engagement: VLE clickstream aggregates (\texttt{sum\_click\_to\_date}, \texttt{days\_active\_to\_date}, per-activity click counts), assessment submission patterns (\texttt{assessment\_submitted\_count}, \texttt{assessment\_on\_time\_rate}, \texttt{avg\_first\_submit\_gap\_days}), and engagement trends (\texttt{click\_intensity\_last\_7d}, \texttt{click\_trend\_slope}). These features have $\delta(f, 0) = 0$ and $\delta(f, h) = 1$ for $h \geq 1$. They are actionable at weight 0.7 because instructors can influence engagement through targeted outreach, platform design, and deadline reminders, though with less certainty than Tier-1 features.
+
+\textbf{Tier 3 --- Past Assessment Scores} ($\omega = 0.0$): Scores on completed assessments (\texttt{score\_CMA1}, \texttt{score\_TMA1}, \texttt{weighted\_assessment\_score\_to\_date}). These become available only after the corresponding assessment deadline has passed ($\delta(f, 0) = 0$, $\delta(f, h \geq 1)$ depends on assessment timing). Although predictive, these features carry zero actionability weight because a completed assessment score cannot be retroactively improved. Selecting these features may maximise $F1_{deploy}$ but contributes nothing to the intervention utility of the model.
+
+\textbf{Critical taxonomy design decision --- exclusion of \texttt{date\_unregistration}}: This feature records when a student withdrew from the module. For students who are still enrolled at prediction time (the target population for early intervention), this is a \textit{future event}: the withdrawal date either does not exist yet or represents an outcome we aim to prevent through intervention. Including this feature would constitute temporal leakage across all horizons. The corrected taxonomy therefore \textbf{excludes} \texttt{date\_unregistration} from all horizons ($\delta(\texttt{date\_unregistration}, h) = 0$ for all $h$), ensuring that the model cannot depend on future withdrawal information that is unavailable for the students we intend to help. This exclusion was identified during peer review and represents a conservative stance against borderline temporal leakage in the target population.
+
+\textbf{Resolution of one-hot encoded features}: Categorical features that have been one-hot encoded (e.g., \texttt{region\_Scotland}, \texttt{region\_Wales}) are resolved to their parent feature profile (e.g., \texttt{region}) via prefix matching. The child inherits the parent's tier, actionability weight, and temporal availability.
+
+\textbf{Unknown features} --- those not registered in the taxonomy --- are assigned $\omega = 0.0$ and $\delta(f, h) = 0$ for all horizons, preventing silent leakage through unlabelled columns. This defensive default ensures that any feature inadvertently omitted from the taxonomy is treated as both non-actionable and temporally unavailable, erring on the side of caution.
+
+\subsection{Deployment-Honest Metrics}
+
+\textbf{Deployment-Realistic AR ($AR_{available}$):}
+
+\begin{equation}
+    AR_{available}(S, h) = \frac{1}{|S|} \sum_{f \in S} \delta(f, h) \cdot \omega(f)
+\end{equation}
+
+This differs from the conventional actionability ratio $AR(S) = \frac{1}{|S|} \sum_{f \in S} \omega(f)$ by inserting $\delta(f, h)$ as a temporal gate. A feature that is actionable in principle but not yet observable at horizon $h$ contributes zero to $AR_{available}$. The leakage coefficient $\tau = 1 - AR_{available} / AR$ (when $AR > 0$) quantifies what fraction of the claimed actionability is temporally phantom. For methods selecting only future-unavailable actionable features at $h=0$, $\tau = 1.000$.
+
+\textbf{Deployment-Realistic F1 (DRE Protocol):}
+
+Given a selected feature set $S$ and horizon $h$, the DRE evaluation proceeds as follows:
+\begin{enumerate}
+    \item Let $S_{unavail} = \{f \in S : \delta(f, h) = 0\}$ be the subset of selected features that are unavailable at horizon $h$.
+    \item For each $f \in S_{unavail}$, compute the training-set column mean $\bar{x}_f = \frac{1}{N_{train}} \sum_{i \in train} x_{if}$ from the \textbf{complete, unmasked} training data.
+    \item Train classifier $g$ on the \textbf{complete, unmasked} training matrix $(X_{train}[S], y_{train})$ --- this reflects the realistic scenario where model training uses historical records with all features fully observed.
+    \item Construct the \textbf{deployment-realistic test matrix} $\tilde{X}_{test}$ by substituting column $f$ with $\bar{x}_f$ for all $f \in S_{unavail}$ --- this simulates the inference-time scenario where temporally unavailable features must be imputed because they have not yet been generated.
+    \item Evaluate the trained model on the masked test matrix: predict $\hat{y}_{test} = g(\tilde{X}_{test})$.
+    \item Report $F1_{deploy} = F1(y_{test}, \hat{y}_{test})$.
+\end{enumerate}
+
+\textbf{Critical implementation note}: The DRE protocol applies masking \textbf{asymmetrically} --- training uses complete historical data (Step 3), while inference uses deployment-realistic masked data (Steps 4--5). This design reflects the operational reality: an institution trains its early warning model on past student cohorts where all features are eventually observed (retrospective training), but must make predictions at deployment time when future features do not yet exist (prospective inference). This corrects an earlier protocol version that masked both training and test data, which was overly pessimistic and did not reflect realistic deployment conditions.
+
+For IC-FS(full), where the temporal filter \texttt{filter\_by\_horizon()} ensures $S_{unavail} = \emptyset$ by construction, the DRE protocol is structurally inactive ($F1_{deploy} = F1_{paper}$ because no features require masking). The protocol becomes operative for ablation variants IC-FS(-temporal) and baselines that do not apply the temporal filter, where $|S_{unavail}| > 0$.
+
+\textbf{Intervention Utility Score ($IUS_{deploy}$) --- Primary Evaluation Metric:}
+
+\begin{equation}
+    IUS_{deploy}(S, h) = F1_{deploy} \times AR_{available}(S, h)
+\end{equation}
+
+reported as a percentage in $[0, 100]$. This is the \textbf{primary evaluation metric} for IC-FS and all baselines. Both components are computed under deployment-honest conditions:
+\begin{itemize}
+    \item $F1_{deploy}$: predictive performance from the DRE protocol (asymmetric masking, inference-time imputation)
+    \item $AR_{available}$: actionability ratio gated by strict temporal availability ($\omega(f) \cdot \delta(f, h)$)
+\end{itemize}
+
+The metric enforces a \textbf{multiplicative hard gate}: if either component is zero, $IUS_{deploy} = 0$ regardless of the other component's value. A model with no temporally-available actionable features ($AR_{available} = 0$) has zero intervention utility even if perfectly predictive; conversely, a model with high actionability but no predictive power under deployment masking ($F1_{deploy} = 0$) is equally useless. This joint constraint eliminates the pathological solutions identified in this paper: methods that achieve high $F1_{paper}$ by selecting future-unavailable features, or high $AR$ by selecting pedagogically actionable features that have not yet been generated at the prediction horizon.
+
+\textbf{Comparison metric --- $IUS_{paper}$ (retained for inflation demonstration):}
+
+\begin{equation}
+    IUS_{paper}(S, h) = F1_{paper} \times AR(S)
+\end{equation}
+
+This is the \textbf{old metric formulation} used implicitly by prior work, where $F1_{paper}$ is computed via standard train/test evaluation without DRE masking, and $AR$ ignores temporal availability. $IUS_{paper}$ is retained exclusively for comparison tables, where it demonstrates the magnitude of the ``Illusion of Actionability'' --- the gap between $IUS_{paper}$ (optimistic, assumes all features exist at deployment) and $IUS_{deploy}$ (honest, reflects actual deployment constraints). For IC-FS(-temporal) at $h=0$, this gap is catastrophic: $IUS_{paper} = 11.99 \pm 0.27$ versus $IUS_{deploy} = 0.00 \pm 0.00$ (mean $\pm$ std over 8 random seeds), reflecting that 100\% of the claimed intervention utility was drawn from features that do not yet exist at course start.
+
+\textbf{Budget-Constrained Metrics:}
+
+To provide an actionable operational metric independent of actionability weighting, we define $\text{Precision}@k\%$ and $\text{Recall}@k\%$ for a fixed intervention budget $k = 20\%$ of the student population:
+
+\begin{equation}
+    \text{Precision}@20\% = \frac{|\{i \in \text{top-}k : y_i = 0\}|}{k}, \qquad
+    \text{Recall}@20\% = \frac{|\{i \in \text{top-}k : y_i = 0\}|}{\sum_i (1 - y_i)}
+\end{equation}
+
+where $y_i = 0$ indicates an at-risk student (Fail/Withdrawn) and $y_i = 1$ indicates a passing student (Pass/Distinction). The ``top-$k$'' students are those with the \textit{lowest} predicted probability of passing (i.e., highest predicted risk). These metrics are AR-independent and directly answer the operational question: given a finite institutional budget, what fraction of genuinely at-risk students does the model identify?
+
+\subsection{Feature Scoring}
+
+For each feature $f_j \in \mathcal{F}_{avail}$ (the set of features available at horizon $h$ after temporal filtering), IC-FS computes four normalised predictive scores from the \textbf{inner training data} (in the nested validation context of Algorithm~\ref{alg:icfs}, Step 3):
+
+\begin{itemize}
+    \item $\phi_{chi2}(j)$: normalised $\chi^2$ statistic computed on \textbf{MinMax-scaled} features ($X_{scaled} \in [0,1]^p$); scaling is required because $\chi^2$ is undefined for negative inputs.
+    \item $\phi_{MI}(j)$: normalised mutual information estimated via nearest-neighbour entropy (scikit-learn's \texttt{mutual\_info\_classif}) on the \textbf{original unscaled} features; MI is scale-invariant and scaling would distort the neighbour graph.
+    \item $\phi_{corr}(j)$: normalised absolute Pearson correlation on \textbf{original unscaled} features, with $0.0$ assigned for near-zero-variance features.
+    \item $\phi_{RF}(j)$: normalised Random Forest feature importance (100 trees) on \textbf{original unscaled} features; tree-based methods are scale-invariant by construction.
+\end{itemize}
+
+The asymmetric input treatment \textemdash MinMax scaling for $\chi^2$ only, raw features for MI, Pearson, and RF \textemdash is intentional: each scorer's non-negativity or scale-invariance properties dictate the appropriate input form.
+Normalisation maps each score to $[0,1]$ via min-max scaling: $\phi_{norm}(j) = (\phi(j) - \min_j\phi) / (\max_j\phi - \min_j\phi + \epsilon)$ where $\epsilon = 10^{-10}$ prevents division by zero. The ensemble predictive score is:
+
+\begin{equation}
+    \text{pred\_score}(j) = \frac{\phi_{chi2}(j) + \phi_{MI}(j) + \phi_{corr}(j) + \phi_{RF}(j)}{4}
+\end{equation}
+
+The ensemble design reduces sensitivity to any individual scorer's failure mode: chi-squared requires non-negative features (guaranteed by MinMax scaling), mutual information is slow to converge in small samples, Pearson correlation misses non-linear dependencies, and RF importance is unstable with correlated features. Their average is more stable than any individual component.
+
+\textbf{Actionability scores} are retrieved via taxonomy lookup: for each $f_j \in \mathcal{F}_{avail}$, the actionability weight $\omega(f_j)$ is determined by resolving $f_j$ to its tier (handling one-hot encoded children via prefix matching) and applying the tier-weight mapping: $w_0 = 0.0$, $w_1 = 1.0$, $w_2 = 0.7$, $w_3 = 0.0$. Features not found in the taxonomy default to $\omega = 0.0$ (conservative safe-fail to prevent silent leakage).
+
+\subsection{The IC-FS Selection Algorithm}
+
+Given the feature score dataframe and a trade-off parameter $\alpha \in [0,1]$, the \textbf{Intervention-Constrained Score} for each feature is:
+
+\begin{equation}
+    \text{IC}(j, \alpha) = \alpha \cdot \text{pred\_score}(j) + (1-\alpha) \cdot \omega(f_j)
+\end{equation}
+
+where $\omega(f_j) = w_{tier(f_j)}$ is the actionability weight from the taxonomy. The top-$k$ features by IC score form the selected set $S_\alpha$. When $\alpha = 0$, selection is driven entirely by actionability weights, producing the most action-focused subset. When $\alpha = 1$, selection reduces to standard greedy predictive feature selection.
+
+The complete IC-FS algorithm is presented in Algorithm~\ref{alg:icfs}.
+
+\begin{algorithm}
+\caption{IC-FS(full) with Nested Validation for $\alpha$ Selection}
+\label{alg:icfs}
+\textbf{Input:} Training data $(X_{train}, y_{train})$, test data $(X_{test}, y_{test})$, feature set $\mathcal{F}$, horizon $h$, $\alpha$-grid $\mathcal{A} = \{0.0, 0.25, 0.5, 0.75, 1.0\}$, top-$k$ budget \\
+\textbf{Output:} Selected feature set $S^*$ and deployment-honest metrics
+\begin{algorithmic}[1]
+    \State \textbf{Temporal filtering:} $\mathcal{F}_{avail} \leftarrow \{f \in \mathcal{F} : \delta(f, h) = 1\}$
+    \Statex \hspace{\algorithmicindent} Remove all features unavailable at horizon $h$
+
+    \State \textbf{Nested validation split for $\alpha$ selection (prevents test-set leakage):}
+    \Statex \hspace{\algorithmicindent} Split $X_{train}[\mathcal{F}_{avail}]$ into $(X_{inner}, y_{inner})$ (80\%) and $(X_{val}, y_{val})$ (20\%) via stratified sampling
+    \Statex \hspace{\algorithmicindent} This inner validation set is used exclusively for selecting $\alpha^*$; the test set is never consulted during hyperparameter search
+
+    \State \textbf{Feature scoring on inner training set:}
+    \Statex \hspace{\algorithmicindent} Compute four-component ensemble scores on $X_{inner}$: $\phi_{chi2}$, $\phi_{MI}$, $\phi_{corr}$, $\phi_{RF}$
+    \Statex \hspace{\algorithmicindent} Normalize each to $[0,1]$; compute $\text{pred\_score} = \frac{1}{4}\sum \phi$
+    \Statex \hspace{\algorithmicindent} Retrieve actionability weights: $\omega(f)$ for each $f \in \mathcal{F}_{avail}$
+
+    \State \textbf{$\alpha$-sweep on validation set:}
+    \For{each $\alpha \in \mathcal{A}$}
+        \State Compute IC scores: $\text{IC}(f, \alpha) = \alpha \cdot \text{pred\_score}(f) + (1-\alpha) \cdot \omega(f)$
+        \State Select top-$k$ features: $S_\alpha \leftarrow \arg\max_{|S|=k} \sum_{f \in S} \text{IC}(f, \alpha)$
+        \State Train Random Forest classifier on $(X_{inner}[S_\alpha], y_{inner})$
+        \State Evaluate on validation set: compute $F1_{val}$ on $(X_{val}[S_\alpha], y_{val})$ via DRE protocol
+        \State Compute $AR_{available}(S_\alpha, h)$ via taxonomy lookup
+        \State Compute $IUS_{val} = F1_{val} \times AR_{available}(S_\alpha, h)$
+    \EndFor
+    \State Select optimal trade-off: $\alpha^* \leftarrow \arg\max_{\alpha \in \mathcal{A}} IUS_{val}(\alpha)$
+
+    \State \textbf{Final model training on full training set:}
+    \Statex \hspace{\algorithmicindent} Recompute feature scores on full $X_{train}[\mathcal{F}_{avail}]$ (not just inner split)
+    \Statex \hspace{\algorithmicindent} Select $S^* = S_{\alpha^*}$ using the validated $\alpha^*$
+    \Statex \hspace{\algorithmicindent} Train final Random Forest on $(X_{train}[S^*], y_{train})$ --- complete, unmasked data
+
+    \State \textbf{Deployment-honest test evaluation:}
+    \Statex \hspace{\algorithmicindent} Apply DRE protocol: mask unavailable features in $X_{test}[S^*]$ with training-set means
+    \Statex \hspace{\algorithmicindent} Predict on masked test data: $\hat{y}_{test} = g(\tilde{X}_{test})$
+    \Statex \hspace{\algorithmicindent} Report $F1_{deploy}$, $AR_{available}(S^*, h)$, and $IUS_{deploy} = F1_{deploy} \times AR_{available}$
+
+    \State \Return $S^*$, $\alpha^*$, and all deployment-honest metrics
+\end{algorithmic}
+\end{algorithm}
+
+\textbf{Implementation notes:}
+
+The nested validation in Step 2 eliminates test-set leakage in $\alpha$ selection. Prior work (and earlier versions of this method) selected $\alpha$ by maximizing $IUS$ on the test set, which constitutes indirect hyperparameter tuning on test data. The corrected protocol uses a held-out validation split exclusively for $\alpha$ selection, with the test set reserved for final reporting only.
+
+The DRE evaluation in Step 4 is structurally inactive for IC-FS(full) at the validation stage (because Step 1 guarantees $S_{unavail} = \emptyset$), but is included for interface consistency across IC-FS variants (full, -temporal, -action). For IC-FS(-temporal), which skips Step 1, the DRE protocol in Step 4 actively masks future-unavailable features during $\alpha$ selection, preventing the method from overfitting to phantom features.
+
+Step 5 retrains on the full training set to maximize sample size for the final model. This is standard practice in nested cross-validation and does not constitute data leakage because $\alpha^*$ was selected independently of the inner/validation split proportions.
+
+\subsection{Bootstrap Stability}
+
+Selection stability is measured by Jaccard similarity across bootstrap resamples. For a given $\alpha$ value, $B = 50$ bootstrap resamples are drawn with replacement from the training set (default in \texttt{ic\_fs\_v2.py}; reduced to $B = 20$ in some experiments for computational efficiency). For each bootstrap iteration $b = 1, \ldots, B$, a resample $(X_b, y_b)$ is drawn, feature scores are recomputed on the bootstrap sample, and the selected feature set $S_{\alpha, b}$ is recorded. The Jaccard stability at the optimal $\alpha^*$ is:
+
+\begin{equation}
+    J = \frac{2}{B(B-1)} \sum_{b < b'} \frac{|S_{\alpha^*,b} \cap S_{\alpha^*,b'}|}{|S_{\alpha^*,b} \cup S_{\alpha^*,b'}|}
+\end{equation}
+
+where the sum is taken over all $\binom{B}{2}$ pairs of bootstrap iterations. This pairwise Jaccard index quantifies the consistency of feature selection under data perturbation.
+
+\textbf{Independence of bootstrap seeds across $\alpha$ values}: Each $\alpha$ value receives a \textbf{distinct bootstrap random seed}, computed as \texttt{bootstrap\_base\_seed + alpha\_index}, where \texttt{alpha\_index} is the position of $\alpha$ in the grid $\{0.0, 0.25, 0.5, \ldots, 1.0\}$. This ensures that bootstrap samples for different $\alpha$ values are independent, preventing artificially inflated stability estimates that could arise from correlated resampling across the $\alpha$-sweep. This design was introduced in \texttt{ic\_fs\_v2.py} to address a subtle bias in earlier implementations.
+
+\subsection{Statistical Testing}
+
+Statistical comparisons between IC-FS variants are conducted using the Wilcoxon signed-rank test \cite{wilcoxon1945} on $IUS_{deploy}$ values across 8 random seeds. With $n=8$ paired observations, the minimum attainable one-sided $p$-value is $2^{-8}/2 \approx 0.0039$, which is below the Bonferroni-adjusted significance threshold $\alpha_{Bonf} = 0.05/3 = 0.0167$ (three hypothesis pairs tested across three horizons). Effect sizes are reported as Cohen's $d$ for paired differences: $d = \bar{\Delta} / s_\Delta$, where $\bar{\Delta}$ is the mean paired difference and $s_\Delta$ its standard deviation. Random Forest classifiers with balanced class weights (\texttt{class\_weight='balanced'}) and \texttt{n\_estimators=100} are used throughout all stages: feature importance scoring during selection, classifier training for standard evaluation, and deployment-realistic evaluation (DRE). A single configuration prevents any systematic bias from tree-count differences between scoring and evaluation.
+
+%% ============================================================
+%%  SECTION 4 — Experimental Setup
+%%  Ready to paste into ICFS-ESWA.tex
+%% ============================================================
+
+\section{Experimental Setup}
+\label{sec:experiments}
+
+\subsection{Datasets}
+
+\textbf{OULAD (Open University Learning Analytics Dataset)} \cite{kuzilek2017} is the primary evaluation dataset. It comprises 32,593 student-module enrollments across 22 module-presentation combinations from the Open University UK. The target variable is binary: Pass/Distinction (positive, $y=1$) versus Fail/Withdrawn (negative, $y=0$), with an approximate pass rate of 60\%. Three prediction horizons are defined as fractions of each module's presentation length: $h=0$ (course start, before any student activity), $h=1$ (25\% elapsed, corresponding roughly to the release of the first computer-marked assessment), and $h=2$ (50\% elapsed, typically after the first tutor-marked assessment). This per-student, proportional horizon definition ensures temporal validity across modules of varying lengths (range: 234--269 days).
+
+At each horizon, features are aggregated strictly up to the horizon cutoff: clickstream events (VLE interactions), assessment submission behaviour, and registration metadata. Features that have not been generated by the cutoff are either NaN (Tier-3 assessment scores) or zero-filled (clickstream aggregates). The feature taxonomy assigns each feature to one of four tiers: Tier 0 (non-actionable demographics: \texttt{gender}, \texttt{region}, \texttt{imd\_band}, \texttt{age\_band}, \texttt{disability}, \texttt{num\_of\_prev\_attempts}, \texttt{studied\_credits}, \texttt{code\_module}, \texttt{code\_presentation}), Tier 1 (pre-semester actionable: \texttt{date\_registration} --- early enrollment timing), Tier 2 (mid-semester behavioural: clickstream aggregates such as \texttt{sum\_click\_to\_date}, \texttt{days\_active\_to\_date}, \texttt{forum\_clicks}, \texttt{resource\_clicks}, and assessment submission patterns like \texttt{assessment\_on\_time\_rate}, \texttt{avg\_first\_submit\_gap\_days}), and Tier 3 (past assessment scores: \texttt{score\_CMA1}, \texttt{score\_TMA1}, \texttt{weighted\_assessment\_score\_to\_date}).
+
+\textbf{Critical exclusion --- \texttt{date\_unregistration}}: Following peer review, the feature \texttt{date\_unregistration} (days from module start to withdrawal) has been \textbf{excluded from all horizons} ($\delta(\text{date\_unregistration}, h) = 0$ for $h \in \{0, 1, 2\}$). For students who remain enrolled at the prediction horizon --- the target population for early intervention --- withdrawal date is a \textit{future event} that either has not occurred or represents an outcome the intervention aims to prevent. Including this feature would allow the model to condition on phantom data unavailable for the students we intend to help. While students who withdrew \textit{before} the prediction horizon have a known \texttt{date\_unregistration} value, the feature is heterogeneously unavailable: retrospectively known for early-withdrawn students, prospectively unknown for enrolled students. To maintain temporal integrity for the intervention target population, the feature is conservatively excluded from the taxonomy at all horizons. This exclusion eliminates a source of borderline temporal leakage identified during peer review.
+
+After one-hot encoding of categorical variables (gender, region, highest\_education, imd\_band, age\_band, disability, code\_module, code\_presentation) and removal of zero-variance columns, the preprocessed feature space contains approximately 60--70 columns per horizon. Target leakage is prevented by excluding the \texttt{final\_result} column prior to feature construction.
+
+The \textbf{UCI Student Performance} dataset \cite{cortez2008} serves as the secondary validation dataset, consisting of 395 and 649 students in the Mathematics and Portuguese courses respectively. The target is a binary pass/fail indicator at final grade $G3 \geq 10$. Three analogous horizons correspond to: $h=0$ (no semester data), $h=1$ (after first-period grade $G1$ and absences become observable), and $h=2$ (after second-period grade $G2$). The UCI dataset provides a controlled comparison because its Tier-3 features ($G1$, $G2$) are near-tautologically correlated with $G3$ ($r \approx 0.90$ for $G2$), making temporal leakage effects particularly pronounced and thus serving as a stress-test for the DRE protocol.
+
+\subsection{Feature Taxonomy and Tier Weights}
+
+The actionability taxonomy assigns each feature to a tier with an associated weight $w_t$:
+
+\begin{itemize}
+    \item \textbf{Tier 0} ($w_0 = 0.0$): Non-actionable demographics and structural features (gender, region, SES proxies, disability status, module identifiers). These are fixed attributes that neither students nor institutions can modify for intervention purposes.
+
+    \item \textbf{Tier 1} ($w_1 = 1.0$): Pre-semester actionable features. In OULAD, this tier contains only \texttt{date\_registration} (early enrollment timing), which institutions can influence through registration-period outreach and reminders. The weight $w_1 = 1.0$ reflects that interventions targeting pre-course enrollment behaviors can be implemented with high fidelity and low resource cost.
+
+    \item \textbf{Tier 2} ($w_2 = 0.7$): Mid-semester behavioural features generated by ongoing student engagement. This includes VLE clickstream aggregates (\texttt{sum\_click\_to\_date}, \texttt{days\_active\_to\_date}, per-activity click counts), assessment submission patterns (\texttt{assessment\_submitted\_count}, \texttt{assessment\_on\_time\_rate}, \texttt{avg\_first\_submit\_gap\_days}), and engagement trends (\texttt{click\_intensity\_last\_7d}, \texttt{click\_trend\_slope}). These features become available at $h \geq 1$ and carry actionability weight $w_2 = 0.7$ because instructors can influence them through targeted email outreach, discussion prompts, deadline reminders, and platform design modifications, albeit with less certainty than Tier-1 pre-enrollment interventions.
+
+    \item \textbf{Tier 3} ($w_3 = 0.0$): Past assessment scores on completed assessments (\texttt{score\_CMA1}, \texttt{score\_TMA1}, \texttt{weighted\_assessment\_score\_to\_date}). These are available only after the corresponding assessment deadline has passed and carry zero actionability weight because a completed assessment score cannot be retroactively improved. Selecting these features may maximize $F1$ but contributes nothing to intervention capacity.
+\end{itemize}
+
+\textbf{Defensive defaults for unknown features}: Features not registered in the taxonomy are assigned $w = 0.0$ (non-actionable) and $\delta(f, h) = 0$ for all horizons (temporally unavailable). This conservative safe-fail mechanism prevents silent leakage through unlabelled columns that may appear due to preprocessing artifacts or feature engineering errors.
+
+\textbf{One-hot encoded feature resolution}: Categorical features that have been one-hot encoded (e.g., \texttt{region\_Scotland}, \texttt{region\_Wales} derived from the parent categorical variable \texttt{region}) are resolved to their parent profile via prefix matching. The one-hot child inherits the parent's tier, actionability weight, and temporal availability. This ensures that encoding schemes do not introduce inconsistencies in the actionability assessment.
+
+\subsection{Compared Methods}
+
+\textbf{IC-FS (full):} The proposed method. At each horizon $h$, the temporal filter \texttt{filter\_by\_horizon()} removes all features with $\delta(f, h) = 0$ before scoring, ensuring that only currently-available features enter the selection pool. Feature scores are computed as the average of four normalised components: $\chi^2$ statistic, mutual information, absolute Pearson correlation, and Random Forest importance. The IC score for each feature is $\text{IC}(f, \alpha) = \alpha \cdot \text{pred\_score}(f) + (1-\alpha) \cdot w_{tier(f)}$. Top-$k=15$ features are selected.
+
+\textbf{Critical implementation detail --- nested validation for $\alpha$ selection}: The $\alpha$-grid $\{0.0, 0.25, 0.5, 0.75, 1.0\}$ is swept using \textbf{nested validation} to prevent test-set leakage in hyperparameter selection. The training data is split into inner training (80\%) and inner validation (20\%) sets. For each $\alpha$ candidate, feature scores are computed on the inner training set, top-$k$ features are selected, a Random Forest is trained on the inner training set, and $IUS_{val}$ is evaluated on the inner validation set. The $\alpha^*$ maximizing $IUS_{val}$ is selected. The final model is then retrained on the full training set using $\alpha^*$ and evaluated on the held-out test set (used exclusively for final reporting, not for $\alpha$ selection). This protocol eliminates indirect test-set leakage present in earlier implementations that selected $\alpha$ by maximizing $IUS$ on the test set.
+
+\textbf{IC-FS(-temporal):} Ablation variant that \textbf{removes the temporal filter} (\texttt{filter\_by\_horizon()} is skipped). All features in the dataset are scored and selected without regard to their availability at the prediction horizon $h$. The IC score formula and $\alpha$-sweep remain identical to IC-FS(full). This variant mirrors the implicit assumption of standard feature selection methods that optimize for predictive accuracy without temporal constraints. It serves as the \textbf{primary demonstration of behavioral leakage}: at $h=0$, IC-FS(-temporal) selects future-unavailable clickstream features that appear predictive in retrospective training data but do not exist at deployment time. Under DRE evaluation, this produces $IUS_{deploy} = 0.00$ at $h=0$ despite reporting $IUS_{paper} = 13.94$, quantifying the ``Illusion of Actionability.''
+
+\textbf{IC-FS(-action):} Ablation variant that \textbf{removes actionability weighting}. All actionability weights are set to $w_t = 1.0$ for all tiers, and the $\alpha$ parameter is fixed at $\alpha = 1.0$ (pure predictive selection). This reduces IC-FS to a standard greedy ensemble feature scorer. The temporal filter remains active. This variant quantifies the contribution of the actionability-weighting component to $IUS_{deploy}$. At $h=1$, IC-FS(-action) achieves lower $IUS_{deploy}$ than IC-FS(full) because it preferentially selects high-predictive but low-actionability features (demographics, module codes) over high-actionability behavioral features.
+
+\textbf{HardFilter+DE-FS:} Ablation variant applying a \textbf{hard binary tier filter} followed by ensemble scoring. Tier-0 (non-actionable demographics) and Tier-3 (past grades) features are discarded upfront; only Tier-1 and Tier-2 features enter the scoring pool. Features are then ranked by the average of three scores: $\chi^2$ statistic, mutual information, and absolute Pearson correlation (no Random Forest component). Top-$k=15$ features are selected. This represents a discrete prior-work approach that separates actionability filtering (binary tier-based exclusion) from predictive scoring, in contrast to IC-FS's continuous weighting scheme. The temporal filter is applied upstream (ensuring fair comparison on the temporal dimension), but the absence of soft actionability weights prevents the method from making nuanced trade-offs between predictive power and intervention capacity.
+
+\textbf{NSGA-II-MOFS:} Multi-objective genetic algorithm using the pymoo implementation of NSGA-II \cite{deb2002, blank2020}. The algorithm simultaneously minimizes two objectives: $-F1$ (negative F1-score, to convert maximization to minimization) and $-AR$ (negative actionability ratio), with a population size of 40 individuals and 25 generations. Each individual encodes a binary feature subset; fitness is evaluated by training a Random Forest on the selected features. The final solution is selected from the Pareto front by choosing the individual that maximizes $IUS_{deploy}$ on the test set. \textbf{Note}: This Pareto-solution selection on the test set introduces a similar hyperparameter-selection leakage to the pre-corrected IC-FS; however, it is retained for fair comparison with prior MOFS literature that uses this protocol. This baseline represents the strongest existing combinatorial approach that explicitly optimizes for actionability alongside predictive performance.
+
+\textbf{Stability Selection:} The Meinshausen--B\"{u}hlmann stability selection procedure \cite{meinshausen2010} with 40 bootstrap subsamples drawn at 75\% subsampling fraction. For each subsample, an $L_1$-penalized logistic regression model is fitted at three regularization levels ($C \in \{0.01, 0.1, 1.0\}$), and features with non-zero coefficients are recorded. The selection frequency (fraction of subsamples in which each feature was selected) is computed across all subsamples and regularization levels. Top-$k=15$ features by selection frequency are selected and passed to a Random Forest classifier for final evaluation. This baseline tests whether bootstrap-aggregated regularization-based selection can implicitly discover actionable features.
+
+\textbf{Boruta:} The Boruta all-relevant feature selection algorithm \cite{kursa2010} implemented via a balanced Random Forest (\texttt{class\_weight=`balanced'}, \texttt{max\_iter=40}). Boruta iteratively compares the importance of real features to shadow features (permuted copies) and retains features whose importance significantly exceeds the maximum shadow importance. Both ``confirmed'' and ``tentative'' features are retained in the final selection (conservative inclusion). The number of selected features is \textbf{not constrained to $k=15$}; Boruta adaptively determines the feature set size, which typically ranges from 8 to 35 features depending on the horizon and random seed. This baseline represents a statistically-principled feature selection approach that does not impose actionability constraints.
+
+\textbf{Baseline temporal filtering}: All baselines apply the temporal filter \texttt{filter\_by\_horizon()} upstream before feature scoring or selection, ensuring fair comparison on the temporal availability dimension. Without this filter, baselines would select future-unavailable features at $h=0$ and produce $IUS_{deploy} = 0$ due to $AR_{available} = 0$, making cross-method comparison uninformative. The temporal filter is the \textbf{minimum deployment-honesty requirement} for any method to be operationally viable.
+
+\subsection{Evaluation Protocol}
+
+All experiments use \textbf{stratified train/test splits} (80\%/20\%) across 8 random seeds: $\{42, 123, 456, 789, 1011, 2024, 3033, 4044\}$. Stratification preserves the class balance (approximately 60\% Pass/Distinction, 40\% Fail/Withdrawn) in both splits. Multi-seed evaluation with $n=8$ enables Wilcoxon signed-rank tests with minimum attainable one-sided $p$-value of $2^{-8}/2 \approx 0.0039$, which is below the Bonferroni-adjusted significance threshold $\alpha_{\text{Bonf}} = 0.05/3 \approx 0.0167$ for three hypothesis pairs tested across three horizons. All reported means and standard deviations are computed across the 8 seeds.
+
+\textbf{Nested validation for hyperparameter selection (IC-FS only)}: For IC-FS variants, the training set is further split into inner training (80\%) and inner validation (20\%) sets using stratified sampling. The $\alpha$ parameter is selected by maximizing $IUS_{val}$ on the inner validation set; the test set is never consulted during $\alpha$ selection. After $\alpha^*$ is determined, the final model is retrained on the full training set and evaluated on the test set. This nested validation protocol prevents test-set leakage in hyperparameter selection, a correction applied during peer review. Baseline methods (NSGA-II, Boruta, Stability Selection, HardFilter+DE-FS) do not require nested validation as they have no hyperparameters tuned via test-set optimization.
+
+\textbf{Deployment-Realistic Evaluation (DRE) protocol}: The DRE protocol is applied uniformly to all methods for computing $F1_{deploy}$. The protocol proceeds as follows:
+
+\begin{enumerate}
+    \item \textbf{Identify unavailable features}: For a selected feature set $S$ at horizon $h$, identify $S_{unavail} = \{f \in S : \delta(f, h) = 0\}$ --- the subset of features not yet generated at the prediction horizon.
+
+    \item \textbf{Compute imputation values from complete training data}: For each $f \in S_{unavail}$, compute the column mean $\bar{x}_f = \frac{1}{N_{train}} \sum_{i \in train} x_{if}$ from the \textbf{complete, unmasked} training matrix $X_{train}[S]$. This reflects that institutions have access to complete historical records for model training.
+
+    \item \textbf{Train on complete data}: Train a Random Forest classifier (100 trees, balanced class weights, RANDOM\_STATE matching the seed) on the \textbf{complete, unmasked} training matrix $(X_{train}[S], y_{train})$. No features are masked during training. This reflects the realistic scenario where the model is trained on past student cohorts for whom all features were eventually observed.
+
+    \item \textbf{Mask unavailable features at inference}: Construct the deployment-realistic test matrix $\tilde{X}_{test}$ by replacing column $f$ with the constant value $\bar{x}_f$ (computed in Step 2) for all $f \in S_{unavail}$. Features in $S \setminus S_{unavail}$ (those available at horizon $h$) retain their true values. This simulates the inference-time scenario where the model must make predictions when future features have not yet been generated, and imputation is the only recourse.
+
+    \item \textbf{Predict on masked test data}: Evaluate the trained classifier on the masked test matrix: $\hat{y}_{test} = g(\tilde{X}_{test})$, where $g$ is the Random Forest trained in Step 3.
+
+    \item \textbf{Report deployment-honest metrics}: Compute $F1_{deploy} = F1(y_{test}, \hat{y}_{test})$ as the weighted F1-score. Compute $AR_{available}(S, h)$ via the temporal-gated actionability formula. Report $IUS_{deploy} = F1_{deploy} \times AR_{available}(S, h)$ as the primary evaluation metric.
+\end{enumerate}
+
+\textbf{Critical design rationale --- asymmetric masking}: The DRE protocol applies masking \textbf{asymmetrically}: training uses complete historical data (Step 3), while inference uses deployment-realistic masked data (Step 4). This reflects operational reality: an institution trains its early warning model on past student cohorts where all features are eventually observed (retrospective complete records), but must make predictions at deployment time when future features do not yet exist (prospective incomplete records). The earlier \textbf{symmetric masking protocol} (masking both training and test data) was overly pessimistic and did not reflect how institutions would realistically deploy such models. The asymmetric protocol was adopted following peer review.
+
+\textbf{For IC-FS(full)}: The DRE protocol is structurally inactive because the temporal filter \texttt{filter\_by\_horizon()} ensures $S_{unavail} = \emptyset$ by construction. No features require masking, so $F1_{deploy} = F1_{paper}$ (standard evaluation). The protocol is included for interface consistency.
+
+\textbf{For IC-FS(-temporal) and ablations}: The DRE protocol is operative. At $h=0$, IC-FS(-temporal) selects clickstream features unavailable at course start, producing $|S_{unavail}| \approx 11$ out of 15 selected features. Under DRE evaluation, these features are masked with training means at inference, resulting in $F1_{deploy} \ll F1_{paper}$ and $AR_{available} = 0$ (because all actionable features selected are temporally unavailable), yielding $IUS_{deploy} = 0.00$ despite $IUS_{paper} > 0$.
+
+\subsection{Metrics}
+
+\textbf{Primary evaluation metric --- $IUS_{deploy}$:}
+
+\begin{equation}
+    IUS_{deploy} = F1_{deploy} \times AR_{available}
+\end{equation}
+
+reported as a percentage in $[0, 100]$. This is the \textbf{primary metric} for ranking all methods across all horizons. It quantifies deployment-honest intervention utility by enforcing a multiplicative hard gate: a model must have both predictive power under deployment masking ($F1_{deploy}$) and temporal-honest actionability ($AR_{available}$) to achieve non-zero $IUS_{deploy}$. A method with perfect $F1_{deploy}$ but $AR_{available} = 0$ (all actionable features are temporally unavailable) scores $IUS_{deploy} = 0$, as does a method with $AR_{available} = 1.0$ but $F1_{deploy} = 0$ (no predictive power).
+
+\textbf{Component metrics (reported separately):}
+
+\begin{itemize}
+    \item $F1_{deploy}$: Weighted F1-score computed via the DRE protocol (asymmetric masking: train on complete data, predict on masked test data). Reported as a percentage.
+
+    \item $AR_{available}$: Deployment-realistic actionability ratio, computed as the mean of temporally-gated actionability scores:
+    \begin{equation}
+        AR_{available}(S, h) = \frac{1}{|S|} \sum_{f \in S} \omega(f) \cdot \delta(f, h)
+    \end{equation}
+    where $\omega(f)$ is the pedagogical actionability weight from the taxonomy and $\delta(f, h) \in \{0,1\}$ is the temporal availability indicator. Unlike the naive $AR = \frac{1}{|S|} \sum_{f \in S} \omega(f)$ (which ignores temporal availability), $AR_{available}$ gates each feature's actionability by whether it exists at the prediction horizon. Reported as a decimal in $[0, 1]$.
+\end{itemize}
+
+\textbf{Comparison metric --- $IUS_{paper}$ (inflation demonstration):}
+
+\begin{equation}
+    IUS_{paper} = F1_{paper} \times AR
+\end{equation}
+
+where $F1_{paper}$ is computed via standard train/test evaluation without DRE masking (both train and test use complete data), and $AR$ is the naive actionability ratio that ignores temporal availability. $IUS_{paper}$ represents the \textbf{optimistic, deployment-dishonest} metric implicitly used by prior work. It is retained exclusively for comparison tables to quantify the ``Illusion of Actionability'' --- the gap between $IUS_{paper}$ (what a method claims to deliver based on retrospective evaluation) and $IUS_{deploy}$ (what it would actually deliver at deployment time). For IC-FS(-temporal) at $h=0$, this gap is catastrophic: $IUS_{paper} \approx 13.94$ versus $IUS_{deploy} = 0.00$.
+
+\textbf{Leakage coefficient:}
+
+\begin{equation}
+    \tau = 1 - \frac{AR_{available}}{AR} \quad \text{(when } AR > 0\text{)}
+\end{equation}
+
+This quantifies what fraction of a method's claimed actionability is drawn from temporally unavailable features. For IC-FS(-temporal) at $h=0$, $\tau = 1.000$ (100\% of claimed actionability is phantom). For IC-FS(full), $\tau = 0.000$ (zero temporal leakage). Reported as a decimal in $[0, 1]$.
+
+\textbf{Budget-constrained metrics (AR-independent validation):}
+
+To provide operational metrics independent of the actionability weighting scheme, two budget-constrained metrics are reported:
+
+\begin{itemize}
+    \item $\text{Precision}@20\%$: Among the top-20\% of students ranked by descending predicted risk (ascending predicted probability of passing), what fraction are genuinely at-risk (ground-truth Fail/Withdrawn)? Computed as:
+    \begin{equation}
+        \text{Precision}@20\% = \frac{|\{i \in \text{top-}20\% : y_i = 0\}|}{0.2 \times N_{test}}
+    \end{equation}
+    where ``top-20\%'' is defined by ascending predicted probability of passing (i.e., highest predicted risk). This answers: ``If we intervene on the 20\% highest-risk students flagged by the model, what fraction genuinely need intervention?''
+
+    \item $\text{Recall}@20\%$: Among all genuinely at-risk students in the test set, what fraction are captured within the top-20\% budget? Computed as:
+    \begin{equation}
+        \text{Recall}@20\% = \frac{|\{i \in \text{top-}20\% : y_i = 0\}|}{\sum_{i=1}^{N_{test}} (1 - y_i)}
+    \end{equation}
+    This answers: ``What coverage of at-risk students does the model achieve within a realistic intervention budget?''
+\end{itemize}
+
+These metrics are AR-independent and directly map to institutional resource allocation scenarios. Most institutions cannot intervene on every flagged student and must allocate finite advising, tutoring, or financial resources to a prioritized subset. The 20\% threshold reflects realistic intervention budgets reported in prior EWS deployments.
+
+%% ============================================================
+%%  SECTION 5 — Results and Analysis
+%% ============================================================
+
+\section{Results and Analysis}
+\label{sec:results}
+
+\subsection{Quantifying the Illusion of Actionability at Course Start ($h=0$)}
+
+Table 2 presents the complete results at $h=0$, the most critical prediction window for pre-emptive retention interventions. The central finding is unambiguous: IC-FS(-temporal), which mirrors the methodology of standard feature selection without temporal constraints, reports $IUS_{paper} = 11.99 \pm 0.27$ while delivering $IUS_{deploy} = 0.00 \pm 0.00$ across all eight random seeds. The leakage coefficient $\tau_{notemp} = 1.000$ confirms that 100\% of the claimed actionability is drawn from features that do not exist at course start --- exclusively clickstream aggregates (\texttt{days\_active\_to\_date}, \texttt{sum\_click\_to\_date}, \texttt{n\_distinct\_activities}, \texttt{forum\_clicks}, \texttt{oucontent\_clicks}, \texttt{homepage\_clicks}, \texttt{subpage\_clicks}) and crucially, \texttt{date\_unregistration} (future withdrawal date for enrolled students). This result is not seed-dependent: the zero-delivery outcome is mathematically guaranteed because $AR_{available} = 0$ for any feature set in which all Tier-2 actionable features are temporally unavailable.
+
+IC-FS(full), by contrast, reports $IUS_{deploy} = 3.75 \pm 0.04$ and $\tau_{full} = 0.000$, confirming zero temporal leakage. The honest available actionable signal at course start reduces to a single Tier-1 feature across all seeds: \texttt{date\_registration} (early enrollment timing), yielding $AR_{available} = 1/15 \approx 0.067$. This reflects a genuine structural limitation of OULAD as a pre-course intervention dataset: the taxonomy contains no static student-controllable Tier-1 features (cf. UCI's \texttt{studytime}, \texttt{schoolsup}, \texttt{famsup}), and all behavioural Tier-2 signals require active course participation to be generated.
+
+The F1 scores at $h=0$ are comparable across all methods (IC-FS(full): $56.25 \pm 0.57\%$; all baselines achieve similar F1 around 56\%), confirming that the available pre-course feature space --- demographic indicators, prior academic history, and registration timing --- carries similar and modest predictive signal regardless of the selection algorithm. The majority-class weighted F1 baseline at this class balance ($\approx 60\%$ pass rate) is approximately 45\%, placing IC-FS(full) at $+11.3$ percentage points above random. More meaningfully, the $\text{Precision}@20\% = 56.82\%$ indicates that when an institution directs intervention resources toward the top-20\% highest-risk students identified by IC-FS(full), 56.82\% of those students are genuine at-risk cases --- a 1.42$\times$ lift over uninformed allocation given the approximately 40\% population at-risk rate.
+
+NSGA-II achieves the highest $IUS_{deploy} = 7.06$ at $h=0$ with $k=8$ features, compared to IC-FS(full)'s 3.75 with $k=15$. This difference is attributable entirely to feature-set size: both methods identify exactly one actionable-available feature (\texttt{date\_registration}), yielding $AR_{available} = 1/8 = 0.125$ for NSGA-II versus $1/15 = 0.067$ for IC-FS, not superior actionability discovery. IC-FS(full) leads NSGA-II on $\text{Precision}@20\%$ ($56.82\%$ vs $55.18\%$), confirming that prediction quality is comparable or better.
+
+\textbf{The k-dependence limitation of $IUS_{deploy}$ is demonstrated starkly by HardFilter+DE-FS at $h=0$.} HardFilter+DE-FS --- which applies a binary tier-based exclusion filter (removes Tier-0 demographics and Tier-3 grades, retaining only Tier-1/Tier-2) followed by ensemble scoring --- achieves $IUS_{deploy} = 51.21 \pm 0.49$ at $h=0$, compared to IC-FS(full)'s $3.75 \pm 0.04$ (a 13.7$\times$ ratio). This apparent paradox illustrates the k-dependence issue acknowledged in Section 6.5. After temporal filtering at $h=0$, only \texttt{date\_registration} (Tier-1) is available among actionable features. HardFilter's binary exclusion restricts selection to Tier-1/Tier-2, producing a minimal feature set ($k \approx 1$) with $AR_{available} \approx 1.0$. IC-FS(full) selects $k=15$ features including demographics (Tier-0), yielding $AR_{available} = 1/15 \approx 0.067$ despite containing the same single actionable feature. The absolute actionable feature count is identical (1); the $IUS_{deploy}$ difference is purely a denominator artifact arising from the $1/|S|$ normalization in $AR_{available}$. This result demonstrates that $IUS_{deploy}$ comparisons across methods with different $k$ values must account for feature-set size effects --- an issue we return to in Section 6.5 when discussing normalized alternatives.
+
+\subsection{The Inflection Point: From Course Start to Early Mid-Term ($h=0 \to h=1$)}
+
+The transition from $h=0$ to $h=1$ is the paper's core empirical narrative. When 25\% of the module has elapsed --- enabling VLE clickstream aggregates, assessment submission behaviour, and engagement regularity metrics to be observed --- IC-FS(full)'s $IUS_{deploy}$ increases from 3.75 to $55.71 \pm 0.30$: an absolute gain of 51.96 IUS points, representing a 1,385\% relative improvement. Table 3 presents the full $h=1$ comparison.
+
+The mechanism of this gain is decomposable into two independent components. The F1 component improves from 56.25\% to 77.38\%, reflecting the genuine predictive power of early VLE engagement patterns over demographic features alone. The AR component undergoes the more dramatic change: $AR_{available}$ increases from 0.067 to 0.720, because 11 of the 15 selected features at $h=1$ are Tier-2 behavioural features simultaneously available and actionable --- daily click counts, forum engagement, quiz activity, assessment submission regularity, and on-time submission rate. These features are not only predictive of outcomes but are directly modifiable by instructor interventions: targeted email nudges, forum discussion prompts, and deadline reminders have documented efficacy in the OULAD context.
+
+Against this backdrop, the baseline comparisons at $h=1$ reveal the accuracy-actionability tension with precision. Boruta achieves the highest raw F1 (81.89\%) and $AR_{available} = 0.338$ by selecting 32 features including Tier-3 assessment scores (\texttt{score\_CMA1}, \texttt{score\_TMA1}, \texttt{weighted\_assessment\_score\_to\_date}). However, its $IUS_{deploy} = 27.64$ places it 28.07 IUS points (101.5\%) below IC-FS(full). The high P@20\% is achieved through diagnostic power (past grade scores enable near-certain identification of at-risk students) rather than intervention capacity: identifying a student whose CMA1 score is 15/100 provides no actionable leverage for a teacher who cannot retroactively improve that score. IC-FS(full) declines this diagnostic shortcut and instead builds a model on features a teacher can directly target.
+
+NSGA-II at $h=1$ achieves $F1 = 80.46\%$ and $IUS_{deploy} = 36.21$ with $AR_{available} = 0.450$ and 14 selected features --- substantially better than Boruta on actionability but still 19.50 IUS points (53.9\%) below IC-FS(full). NSGA-II's feature set includes \texttt{weighted\_assessment\_score\_to\_date} (Tier-3), which contributes to its high F1 but zero actionability. Stability Selection achieves the lowest IUS (18.45) with $AR_{available} = 0.233$, confirming that its poor IUS stems from selecting predominantly demographic and module-identifier features with minimal actionable content.
+
+The F1 comparability between IC-FS(full) (77.38\%), NSGA-II (80.46\%), and Boruta (81.89\%) at $h=1$ --- differences of 3--4 percentage points --- demonstrates that actionability-constrained selection does not catastrophically sacrifice predictive performance. However, IC-FS achieves substantially higher IUS (55.71 vs 36.21 for NSGA-II vs 27.64 for Boruta) despite slightly lower F1, confirming that the IUS gap is driven by the actionability dimension: IC-FS selects features that instructors can act upon, while baselines preferentially include demographics and past-grade scores with higher predictive power but zero intervention capacity.
+
+\subsection{Ablation Study: Quantifying Each Component's Contribution}
+
+Table 4 reports the multi-seed ablation at $h=1$ ($n=8$ seeds), where Tier-2 features are available and actionability constraints are most consequential.
+
+\textbf{Actionability weighting is the dominant contributor.} IC-FS(full) achieves $IUS_{deploy} = 55.71 \pm 0.30$ versus IC-FS(-action) at $45.10 \pm 0.22$, a mean difference of 10.61 IUS points (23.5\% improvement). IC-FS(-action) sets all tier weights to 1.0 and fixes $\alpha=1.0$, reducing to pure predictive selection. The resulting feature sets preferentially include demographics (\texttt{highest\_education}, \texttt{imd\_band}) and module codes with higher predictive correlations but zero actionability, demonstrating that accuracy-optimization without actionability constraints systematically selects non-intervention features.
+
+\textbf{The continuous weighting scheme provides marginal gains over hard binary filtering.} HardFilter+DE-FS, which applies a binary tier-based filter (excludes Tier-0 and Tier-3, retains only Tier-1 and Tier-2) followed by ensemble scoring, achieves $IUS_{deploy} = 55.65 \pm 0.09$ at $h=1$ --- within 0.11\% of IC-FS(full)'s 55.71. This near-equivalence at $h=1$ reflects that the most actionable features (VLE clickstreams, assessment behavior) also happen to be among the most predictive at this horizon, reducing the value of the continuous $\alpha$ trade-off. The advantage of IC-FS's soft weighting manifests at horizons where actionability and predictive power diverge more strongly.
+
+\textbf{The temporal filter's contribution is horizon-dependent.} IC-FS(full) versus IC-FS(-temporal) at $h=1$: the stat8 ablation produces $IUS_{deploy}$ differences of exactly 0.00 for all 8 seeds (Wilcoxon $W=0$, $p=1.000$). This is expected: at $h=1$, \texttt{filter\_by\_horizon()} passes all Tier-2 features through, and both variants converge to the same $\alpha$-optimal selection from the same available feature pool. The temporal filter's contribution is structural rather than performance-based at $h=1$: its value manifests catastrophically at $h=0$ (IC-FS(-temporal) $IUS_{deploy}=0.00$ vs IC-FS(full) $IUS_{deploy}=3.75$) and gracefully vanishes as the horizon advances. This asymmetric profile is a designed property of the framework: maximum protection at the window of maximum leakage risk, zero overhead at windows where all actionable features are genuinely available.
+
+\subsection{Temporal Convergence: Validation at $h=2$}
+
+At $h=2$ (50\% course elapsed), IC-FS(full) and IC-FS(-temporal) produce numerically identical $IUS_{deploy}$ across all 8 seeds (mean difference $< 0.01$, within numerical precision). This perfect convergence constitutes an internal validity check: when all Tier-2 features are available and the temporal filter ceases to remove any feature, both variants must select identical feature sets. The result confirms that the temporal masking mechanism introduces no systematic bias, numerical drift, or training instability.
+
+IC-FS(full) achieves $IUS_{deploy} = 60.63 \pm 0.30$ at $h=2$, a gain of 4.92 IUS points over $h=1$ (55.71). The $AR_{available}$ remains at 0.720, identical to $h=1$, with the IUS improvement driven entirely by the F1 improvement from 77.38\% to 84.21\% as later course behaviour provides richer predictive signal. Baseline methods continue their pattern of high F1 / low IUS: NSGA-II reaches $F1=89.24\%$ and $P@20\%=95.86\%$ by selecting Tier-3 assessment scores (\texttt{score\_CMA2}, \texttt{score\_TMA2}, \texttt{weighted\_assessment\_score\_to\_date}) now available at $h=2$, but $AR_{available}=0.493$ and $IUS_{deploy}=43.98$ remain 21.0 points below IC-FS(full). The marginal P@20\% advantage of baselines at $h=2$ (NSGA-II: 95.86\% vs IC-FS: 92.92\%) reflects that past-grade scores enable near-certain retrospective identification of failing students --- a property of zero operational value for prospective intervention.
+
+\subsection{Summary}
+
+Table 5 presents a unified view of all methods and horizons. Three patterns are stable:
+
+\begin{enumerate}
+    \item \textbf{$IUS_{deploy}$ correctly orders methods by deployment utility in ways raw F1 cannot.} At $h=1$, Boruta $>$ NSGA-II $>$ IC-FS(full) on F1 but IC-FS(full) $>$ NSGA-II $>$ Boruta on $IUS_{deploy}$.
+
+    \item \textbf{The $h=0$ IUS collapse is categorical.} IC-FS(-temporal)'s $IUS_{deploy} = 0.00$ is not a marginal difference --- it reflects a fundamental impossibility of delivering actionable intervention with features that do not yet exist.
+
+    \item \textbf{IC-FS(full) maintains competitive or superior P@20\% at $h=0$ and $h=1$} while enforcing temporal and actionability constraints, demonstrating that deployment honesty does not require sacrificing early-warning sensitivity.
+\end{enumerate}
+
+%% ============================================================
+%%  SECTION 6 — Discussion
+%% ============================================================
+
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{The Two Forms of Leakage in Early Warning Systems}
+
+The literature on EDM has extensively documented statistical data leakage --- target encoding, preprocessing on the full dataset before splitting, and outcome-proximate features inadvertently included in training \cite{kaufman2012, kapoor2023, baker2014}. This paper identifies and operationalises a second, orthogonal form: \textbf{behavioral leakage}, in which features represent future student actions that are legitimately predictive but structurally unavailable at the point of prediction. The distinction matters because behavioral leakage does not violate standard train/test split protocols --- the features are present in both training and test data, computed from the same historical records, and carry genuine signal. It is only under deployment conditions --- where the teacher must act before the behaviour has occurred --- that the leakage becomes visible.
+
+The OULAD dataset makes behavioral leakage particularly tractable to study because clickstream features are generated progressively throughout the course, and their temporal availability is precisely defined by module calendar records. The $IUS_{paper}$ versus $IUS_{deploy}$ comparison quantifies the gap: IC-FS(-temporal) reporting $IUS_{paper} = 11.99 \pm 0.27$ but $IUS_{deploy} = 0.00$ at $h=0$ is claiming actionability from clickstream data that had not yet been generated on day 0 of the module. No methodological sleight of hand is involved --- the method simply was never asked whether its features exist at prediction time.
+
+\subsection{Why Accuracy-Optimising Methods Create the Illusion of Actionability}
+
+The Illusion of Actionability is not a bug in baseline methods; it is the predictable outcome of optimising for accuracy without temporal constraints. From a feature scoring perspective, clickstream aggregates (\texttt{sum\_click\_to\_date}, \texttt{days\_active\_to\_date}) are highly correlated with final outcomes even at $h=0$ --- their eventual values are predictive, and any algorithm that can see those values will select them. The pedagogical actionability of clickstream features is also genuine: teachers can send engagement nudges, tutors can personalise outreach, and platform designers can modify learning pathways based on click behaviour. The problem is the conflation of \textit{eventual actionability} with \textit{current actionability}: a feature that will be actionable in eight weeks is not actionable today.
+
+The Boruta result at $h=1$ illustrates the dual failure mode. Boruta achieves high F1 (81.89\%) by including assessment scores (\texttt{score\_CMA1}, \texttt{score\_TMA1}, \texttt{weighted\_assessment\_score\_to\_date}) alongside clickstream features. The assessment scores are retrospective --- they measure outcomes of past assessments that cannot be retroactively improved --- yet they provide diagnostic power that inflates F1. In a deployment scenario where a teacher receives a list of at-risk students and an explanation of the features that contributed to each prediction, a model citing \texttt{score\_CMA1 = 15/100} gives the teacher an accurate diagnosis but no lever to pull. IC-FS rejects this diagnostic framing in favour of an interventional one: the features it selects are those a teacher can influence, producing slightly lower F1 but substantially higher intervention utility.
+
+\subsection{OULAD as a Structural Test Case for Tier-1 Scarcity}
+
+A finding that requires explicit acknowledgment is that OULAD's Tier-1 feature space is structurally poor. The dataset contains no static pre-semester student-controllable features analogous to UCI's \texttt{studytime}, \texttt{schoolsup}, \texttt{famsup}, or \texttt{paid} --- features that advisors can target through registration-time interventions. The only Tier-1 feature with non-trivial predictive signal is \texttt{date\_registration}, capturing early enrollment timing. As a result, IC-FS(full) at $h=0$ achieves $AR_{available} \approx 0.067$ --- one actionable feature in fifteen --- and $IUS_{deploy} = 3.75 \pm 0.04$.
+
+This is not a weakness of IC-FS; it is an honest reflection of what OULAD's data architecture allows at course start. The correct institutional implication is practical: an EWS deployed on OULAD-like data at $h=0$ has extremely limited intervention capacity and should primarily function as a triage tool (identifying who to monitor) rather than an intervention tool (identifying what to do). The $h=1$ horizon, at which $AR_{available}$ reaches 0.720, is the minimum threshold for operationally meaningful deployment. This insight --- the \textit{optimal intervention window} is not the earliest possible prediction horizon but the horizon at which actionable features first become available --- is a direct, actionable implication of the $IUS_{deploy}$ framework.
+
+This limitation should be transparently communicated in institution-facing deployments. The $IUS_{deploy}$ metric serves this communication function: a system reporting $IUS_{deploy} = 3.75$ at $h=0$ and 55.71 at $h=1$ is already conveying to its operators that early course predictions carry minimal actionable information, while mid-course predictions are both accurate and actionable.
+
+\subsection{The $\alpha$ Parameter and the Predictive-Actionable Trade-off}
+
+The IC-FS $\alpha$-sweep exposes a trade-off surface that hard-filtering approaches cannot express. At $\alpha=0$ (pure actionability, $\beta=1$), IC-FS selects features entirely by tier weight, maximising $AR_{available}$ at the cost of F1. At $\alpha=1$ (pure prediction), IC-FS reduces to standard greedy scoring, maximising F1 at the cost of actionability. The $IUS_{deploy}$-maximising $\alpha$ in the experimental results varies by horizon and dataset: $\alpha \in \{0.0, 0.25, 0.5\}$ depending on seed and horizon, reflecting that at $h=1$ the best actionable features are also among the best predictive features (VLE engagement correlates strongly with outcomes), so low $\alpha$ values suffice.
+
+This convergence between actionability and predictive power at $h=1$ --- the same features that are actionable also happen to be predictive --- explains why IC-FS(full) and IC-FS(-temporal) produce near-identical F1 at $h=1$. The temporal filter's role at this horizon is preventive (blocking future features that might appear if they existed) rather than restorative (recovering accuracy lost to actionability constraints). At $h=0$, where this convergence breaks down because the most predictive features are future-unavailable, the temporal filter becomes the critical differentiator.
+
+\subsection{Statistical Validity and Limitations}
+
+The ablation data demonstrate IC-FS(full)'s superiority over IC-FS(-action) at $h=1$: a mean IUS gain of 10.61 points (23.5\% improvement). The full versus no-temporal comparison at $h=1$ shows near-zero difference (mean $< 0.01$ IUS points), a result that is mechanistically expected: the temporal filter is structurally inactive at $h=1$ because all Tier-2 features are already available. The null result at $h=1$ validates the taxonomy's internal consistency; it does not undermine the method's value, which was demonstrated categorically at $h=0$.
+
+Several limitations warrant acknowledgment. First, the top-$k$ parameter affects the denominator of $AR_{available}$, and smaller feature sets mechanically yield higher AR when the actionable feature count is fixed. This artifact is most visible at $h=0$ where HardFilter+DE-FS ($k \approx 1$) achieves $IUS_{deploy}=51.21$ compared to IC-FS(full)'s 3.75 ($k=15$) despite both containing exactly one actionable feature (\texttt{date\_registration}). Similarly, NSGA-II's $k=8$ produces higher $IUS_{deploy}$ than IC-FS(full)'s $k=15$ despite identical actionable feature counts. This is not a metric flaw per se --- smaller feature sets genuinely concentrate actionable signal more densely --- but it does mean that $IUS_{deploy}$ comparisons across methods with different $k$ values must account for feature-set size effects. Practitioners should consider normalised actionability metrics (e.g., $IUS_{norm} = F1 \times (\text{count\_actionable}/k_{max})$ with fixed $k_{max}$) or report $AR_{available}$ alongside absolute counts of actionable-and-available features to enable fair cross-method comparison. Second, the DRE protocol's train-mean imputation is a conservative choice --- more sophisticated imputation (median, mode, model-based) could reduce the pessimism of $F1_{deploy}$ estimates. Third, the OULAD taxonomy reflects the Open University's pedagogical context and is not directly transferable to other institutional settings; generalisation of IC-FS requires constructing a dataset-specific taxonomy with domain experts \cite{viberg2020, tsai2024}. Fourth, while OULAD provides comprehensive evaluation of the framework, additional validation on diverse educational contexts (K-12 datasets, MOOCs, resource-constrained settings) would strengthen generalisability claims. Recent work on learning analytics deployments \cite{slater2022, lodge2023} highlights the importance of context-specific validation in operational EWS systems.
+
+\subsection{Implications for Practice and Policy}
+
+The principal practical implication of this work is a recommendation against single-horizon EWS deployment. An institution that deploys a student risk model exclusively at course start, motivated by the desire for maximum lead time, is likely operating under the Illusion of Actionability: the model selects features that appear actionable but are not yet available or are future-valued. The $IUS_{deploy}$ framework provides an auditable, interpretable check: if a system's $IUS_{deploy}$ at the intended deployment horizon is substantially lower than its $IUS_{paper}$, the institution should either delay deployment to a later horizon or commission a review of the feature taxonomy.
+
+For EdTech practitioners and institutional researchers, the Deployment-Realistic Evaluation protocol proposed here is directly reusable: it requires no modification to existing feature selection algorithms, only a post-selection masking step that any institution can apply with knowledge of their data collection timeline. The addition of $\text{Precision}@20\%$ and $\text{Recall}@20\%$ as budget-constrained metrics further aligns model evaluation with institutional resource constraints --- most institutions cannot intervene on every flagged student, and the relevant operational question is not global F1 but targeted precision within a realistic intervention budget.
+
+The $h=1$ horizon (25\% module elapsed) is identified as the optimal deployment window for OULAD-style asynchronous online courses: F1 reaches 77.38\%, $AR_{available}$ reaches 0.720, and Precision@20\% reaches 83.73\%, representing a genuinely actionable and predictively sound combination. Translated to calendar terms for a typical 30-week Open University module, this corresponds to approximately 7--8 weeks after the module start --- a window consistent with the timing of the first computer-marked assessment and well within the period where retention interventions have documented effectiveness.
+% To print the credit authorship contribution details
+\printcredits
+
+%% Loading bibliography style file
+%\bibliographystyle{model1-num-names}
+\bibliographystyle{cas-model2-names}
+
+% Loading bibliography database
+\bibliography{cas-refs}
+
+% Biography
+%\bio{}
+% Here goes the biography details.
+%\endbio
+
+%\bio{pic1}
+% Here goes the biography details.
+%\endbio
+
+\end{document}
+
