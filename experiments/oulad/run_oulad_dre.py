@@ -42,14 +42,14 @@ project_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / "src"))
 
-from icfs.core import (
+from ic_fs_v2 import (
     feature_scores_for_selection, ic_fs_select,
     actionability_ratio, actionability_ratio_available,
     temporal_validity_score, compute_ius,
     compute_ius_deploy, compute_ius_paper,
     filter_by_horizon, get_temporal_availability,
 )
-from icfs.taxonomy_oulad import TAXONOMY_OULAD
+from src.icfs.taxonomy_oulad import TAXONOMY_OULAD
 from preprocess_oulad import preprocess_oulad, load_oulad_horizon
 
 RNG_SEEDS = [42, 123, 456, 789, 1011, 2024, 3033, 4044]
@@ -107,6 +107,19 @@ def select_best_ius(X_tr, y_tr, X_te, y_te, names, horizon, random_state,
                       apply_temporal_filter: bool):
     """Run IC-FS α-sweep and return best-IUS selection.
 
+    CRITICAL FIX (ESWA Reviewer 2 - WEAKNESS #2):
+    Alpha selection now uses NESTED VALIDATION on training data only.
+    Previously, alpha was selected by maximizing IUS on the test set,
+    which constituted indirect test-set leakage.
+
+    New protocol:
+      1. Split training data into train_inner (80%) / val_inner (20%)
+      2. Compute feature scores on train_inner
+      3. For each alpha, select features and evaluate F1 on val_inner
+      4. Select alpha* that maximizes IUS_val (computed on val_inner)
+      5. Retrain on full training set with selected alpha*
+      6. Return final selection (without using test set for alpha selection)
+
     apply_temporal_filter:
       True  → IC-FS (full): filter unavailable features before scoring
       False → IC-FS (-temporal): use all features (DE-FS-style)
@@ -124,27 +137,57 @@ def select_best_ius(X_tr, y_tr, X_te, y_te, names, horizon, random_state,
         X_te_use = X_te
         feat_use = names
 
-    score_df = feature_scores_for_selection(X_tr_use, y_tr, feat_use,
+    # NESTED VALIDATION: split training data for alpha selection
+    # Use a fixed validation seed (based on random_state) for reproducibility
+    val_seed = random_state + 1000
+    X_tr_inner, X_val_inner, y_tr_inner, y_val_inner = train_test_split(
+        X_tr_use, y_tr, test_size=0.2, random_state=val_seed, stratify=y_tr
+    )
+
+    # Compute feature scores on INNER TRAINING SET only
+    score_df = feature_scores_for_selection(X_tr_inner, y_tr_inner, feat_use,
                                               TAXONOMY_OULAD)
 
-    best_sel = None
-    best_ius = -np.inf
+    # Alpha sweep on validation set (NOT test set)
+    best_ius_val = -np.inf
     best_alpha = None
     for alpha in ALPHA_GRID:
         sel = ic_fs_select(score_df, alpha, min(TOP_K, len(feat_use)))
         sel_local = [feat_use.index(f) for f in sel]
-        f1 = fit_predict_f1(X_tr_use, y_tr, X_te_use, y_te,
-                              sel_local, random_state)
-        ius = compute_ius(f1, sel, horizon, TAXONOMY_OULAD)
-        if ius > best_ius:
-            best_ius, best_sel, best_alpha = ius, sel, alpha
+        # Evaluate on VALIDATION set (inner), not test set
+        f1_val = fit_predict_f1(X_tr_inner, y_tr_inner, X_val_inner, y_val_inner,
+                                  sel_local, val_seed)
+        ius_val = compute_ius(f1_val, sel, horizon, TAXONOMY_OULAD)
+        if ius_val > best_ius_val:
+            best_ius_val, best_alpha = ius_val, alpha
 
-    return best_sel, best_alpha, best_ius
+    # RETRAIN on full training set with selected alpha* (deployment-realistic)
+    score_df_full = feature_scores_for_selection(X_tr_use, y_tr, feat_use,
+                                                   TAXONOMY_OULAD)
+    final_sel = ic_fs_select(score_df_full, best_alpha, min(TOP_K, len(feat_use)))
+
+    # Compute final IUS on test set (for reporting only, NOT for alpha selection)
+    final_sel_local = [feat_use.index(f) for f in final_sel]
+    final_f1 = fit_predict_f1(X_tr_use, y_tr, X_te_use, y_te,
+                                final_sel_local, random_state)
+    final_ius = compute_ius(final_f1, final_sel, horizon, TAXONOMY_OULAD)
+
+    return final_sel, best_alpha, final_ius
 
 
 def evaluate_under_dre(X_tr, y_tr, X_te, y_te, selected_features, horizon,
                          names, random_state):
-    """Mask temporally-unavailable selected features, retrain, evaluate.
+    """DEPLOYMENT-REALISTIC EVALUATION (CORRECTED - ESWA Reviewer 2 CONCERN #6).
+
+    Previous (INCORRECT) protocol:
+      - Masked unavailable features in BOTH training and test sets
+      - Trained model on mean-imputed training data
+      - This is unrealistic: in deployment, you train on complete historical data
+
+    New (CORRECT) protocol:
+      1. Train on COMPLETE training data (all selected features available)
+      2. At inference (test time), mask unavailable features with train-column means
+      3. This matches real deployment: model trained on full history, predicts on partial data
 
     Returns:
         f1: weighted F1 score
@@ -154,19 +197,25 @@ def evaluate_under_dre(X_tr, y_tr, X_te, y_te, selected_features, horizon,
     X_tr_s = X_tr[:, sel_idx].astype(np.float64).copy()
     X_te_s = X_te[:, sel_idx].astype(np.float64).copy()
 
-    # Mask with train-mean for unavailable features
+    # Compute train-column means BEFORE any masking
     train_means = X_tr_s.mean(axis=0)
-    for j, f in enumerate(selected_features):
-        if not get_temporal_availability(f, horizon, TAXONOMY_OULAD):
-            X_tr_s[:, j] = train_means[j]
-            X_te_s[:, j] = train_means[j]
 
+    # NEW: Train on COMPLETE data (no masking in training)
+    # In real deployment, we train on historical data where all values are known
     rf = RandomForestClassifier(n_estimators=N_TREES,
                                   random_state=random_state,
                                   n_jobs=-1, class_weight='balanced')
-    rf.fit(X_tr_s, y_tr)
-    y_pred = rf.predict(X_te_s)
-    y_proba = rf.predict_proba(X_te_s)[:, 1] if len(rf.classes_) > 1 else y_pred.astype(float)
+    rf.fit(X_tr_s, y_tr)  # ← Train on UNMASKED data
+
+    # CORRECTED: Apply masking ONLY at inference time (test set)
+    X_te_deploy = X_te_s.copy()
+    for j, f in enumerate(selected_features):
+        if not get_temporal_availability(f, horizon, TAXONOMY_OULAD):
+            X_te_deploy[:, j] = train_means[j]  # ← Mask only at inference
+
+    # Predict on deployment-realistic (masked) test data
+    y_pred = rf.predict(X_te_deploy)
+    y_proba = rf.predict_proba(X_te_deploy)[:, 1] if len(rf.classes_) > 1 else y_pred.astype(float)
     f1 = f1_score(y_te, y_pred, average='weighted', zero_division=0)
     return f1, y_proba
 

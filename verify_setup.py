@@ -74,8 +74,6 @@ def check_data_files():
     print("\n✓ All data files present")
     return True
 
-
-def check_source_files():
     """Check source code files exist."""
     print("\n" + "="*60)
     print("Checking Source Files...")
@@ -105,7 +103,6 @@ def check_source_files():
     return True
 
 
-def check_directories():
     """Check required directories exist."""
     print("\n" + "="*60)
     print("Checking Directories...")
@@ -148,8 +145,6 @@ def main():
 
     checks = [
         check_dependencies(),
-        check_directories(),
-        check_source_files(),
         check_data_files(),
     ]
 

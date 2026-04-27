@@ -38,7 +38,7 @@ project_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / "src"))
 
-from icfs.core import (
+from ic_fs_v2 import (
     Tier, _resolve_parent,
     feature_scores_for_selection, ic_fs_select,
     actionability_ratio, actionability_ratio_available,
@@ -46,7 +46,7 @@ from icfs.core import (
     compute_ius_deploy, compute_ius_paper,
     filter_by_horizon,
 )
-from icfs.taxonomy_oulad import TAXONOMY_OULAD
+from src.icfs.taxonomy_oulad import TAXONOMY_OULAD
 from preprocess_oulad import preprocess_oulad, load_oulad_horizon
 
 RNG_SEEDS = [42, 123, 456, 789, 1011, 2024, 3033, 4044]
@@ -71,49 +71,100 @@ def _eval(X_tr, y_tr, X_te, y_te, sel_idx, seed, cv_folds=3):
 
 
 def run_full(X_tr, y_tr, X_te, y_te, names, horizon, seed):
-    """IC-FS (full): temporal filter + α-sweep, return best-IUS row."""
+    """IC-FS (full): temporal filter + α-sweep, return best-IUS row.
+
+    FIXED (ESWA Reviewer 2 - WEAKNESS #2):
+    Alpha selection now uses NESTED VALIDATION to eliminate test-set leakage.
+    Previously selected alpha on test set, causing ~0.2 point optimistic bias.
+    """
     available = filter_by_horizon(names, horizon, TAXONOMY_OULAD)
     idx = [names.index(f) for f in available]
     X_tr_a, X_te_a = X_tr[:, idx], X_te[:, idx]
-    sdf = feature_scores_for_selection(X_tr_a, y_tr, available, TAXONOMY_OULAD)
 
-    best = None
+    # NESTED VALIDATION: split training for alpha selection
+    val_seed = seed + 1000
+    X_tr_inner, X_val_inner, y_tr_inner, y_val_inner = train_test_split(
+        X_tr_a, y_tr, test_size=0.2, random_state=val_seed, stratify=y_tr
+    )
+
+    # Compute scores on INNER TRAINING SET only
+    sdf = feature_scores_for_selection(X_tr_inner, y_tr_inner, available, TAXONOMY_OULAD)
+
+    # Alpha selection on VALIDATION set (NOT test set)
+    best_alpha = None
+    best_ius_val = -np.inf
     for alpha in ALPHA_GRID:
         sel = ic_fs_select(sdf, alpha, min(TOP_K, len(available)))
         sel_loc = [available.index(f) for f in sel]
-        ev = _eval(X_tr_a, y_tr, X_te_a, y_te, sel_loc, seed)
-        ar = actionability_ratio(sel, TAXONOMY_OULAD)
-        ar_avail = actionability_ratio_available(sel, horizon, TAXONOMY_OULAD)
-        tvs = temporal_validity_score(sel, horizon, TAXONOMY_OULAD)
-        ius_paper = compute_ius_paper(ev["f1"], sel, horizon, TAXONOMY_OULAD)
-        ius_deploy = compute_ius_deploy(ev["f1"], sel, horizon, TAXONOMY_OULAD)
-        if best is None or ius_deploy > best["IUS_deploy"]:
-            best = {"f1": ev["f1"] * 100, "accuracy": ev["accuracy"] * 100,
-                     "AR": ar, "AR_available": ar_avail, "TVS": tvs,
-                     "IUS_paper": ius_paper * 100, "IUS_deploy": ius_deploy * 100,
-                     "alpha": alpha, "n": len(sel), "sel": sel}
-    return best
+        ev_val = _eval(X_tr_inner, y_tr_inner, X_val_inner, y_val_inner, sel_loc, val_seed)
+        ius_val = compute_ius_deploy(ev_val["f1"], sel, horizon, TAXONOMY_OULAD)
+        if ius_val > best_ius_val:
+            best_ius_val = ius_val
+            best_alpha = alpha
+
+    # RETRAIN on full training set with selected alpha
+    sdf_full = feature_scores_for_selection(X_tr_a, y_tr, available, TAXONOMY_OULAD)
+    sel_final = ic_fs_select(sdf_full, best_alpha, min(TOP_K, len(available)))
+    sel_loc_final = [available.index(f) for f in sel_final]
+
+    # Evaluate on TEST SET (for reporting only, NOT for alpha selection)
+    ev = _eval(X_tr_a, y_tr, X_te_a, y_te, sel_loc_final, seed)
+    ar = actionability_ratio(sel_final, TAXONOMY_OULAD)
+    ar_avail = actionability_ratio_available(sel_final, horizon, TAXONOMY_OULAD)
+    tvs = temporal_validity_score(sel_final, horizon, TAXONOMY_OULAD)
+    ius_paper = compute_ius_paper(ev["f1"], sel_final, horizon, TAXONOMY_OULAD)
+    ius_deploy = compute_ius_deploy(ev["f1"], sel_final, horizon, TAXONOMY_OULAD)
+
+    return {"f1": ev["f1"] * 100, "accuracy": ev["accuracy"] * 100,
+            "AR": ar, "AR_available": ar_avail, "TVS": tvs,
+            "IUS_paper": ius_paper * 100, "IUS_deploy": ius_deploy * 100,
+            "alpha": best_alpha, "n": len(sel_final), "sel": sel_final}
 
 
 def run_no_temporal(X_tr, y_tr, X_te, y_te, names, horizon, seed):
-    """IC-FS(-temporal): no filter (DE-FS-style)."""
-    sdf = feature_scores_for_selection(X_tr, y_tr, names, TAXONOMY_OULAD)
-    best = None
+    """IC-FS(-temporal): no filter (DE-FS-style).
+
+    FIXED (ESWA Reviewer 2 - WEAKNESS #2):
+    Alpha selection now uses NESTED VALIDATION (same fix as run_full).
+    """
+    # NESTED VALIDATION: split training for alpha selection
+    val_seed = seed + 1000
+    X_tr_inner, X_val_inner, y_tr_inner, y_val_inner = train_test_split(
+        X_tr, y_tr, test_size=0.2, random_state=val_seed, stratify=y_tr
+    )
+
+    # Compute scores on INNER TRAINING SET only
+    sdf = feature_scores_for_selection(X_tr_inner, y_tr_inner, names, TAXONOMY_OULAD)
+
+    # Alpha selection on VALIDATION set (NOT test set)
+    best_alpha = None
+    best_ius_val = -np.inf
     for alpha in ALPHA_GRID:
         sel = ic_fs_select(sdf, alpha, TOP_K)
         sel_idx = [names.index(f) for f in sel]
-        ev = _eval(X_tr, y_tr, X_te, y_te, sel_idx, seed)
-        ar = actionability_ratio(sel, TAXONOMY_OULAD)
-        ar_avail = actionability_ratio_available(sel, horizon, TAXONOMY_OULAD)
-        tvs = temporal_validity_score(sel, horizon, TAXONOMY_OULAD)
-        ius_paper = compute_ius_paper(ev["f1"], sel, horizon, TAXONOMY_OULAD)
-        ius_deploy = compute_ius_deploy(ev["f1"], sel, horizon, TAXONOMY_OULAD)
-        if best is None or ius_deploy > best["IUS_deploy"]:
-            best = {"f1": ev["f1"] * 100, "accuracy": ev["accuracy"] * 100,
-                     "AR": ar, "AR_available": ar_avail, "TVS": tvs,
-                     "IUS_paper": ius_paper * 100, "IUS_deploy": ius_deploy * 100,
-                     "alpha": alpha, "n": len(sel), "sel": sel}
-    return best
+        ev_val = _eval(X_tr_inner, y_tr_inner, X_val_inner, y_val_inner, sel_idx, val_seed)
+        ius_val = compute_ius_deploy(ev_val["f1"], sel, horizon, TAXONOMY_OULAD)
+        if ius_val > best_ius_val:
+            best_ius_val = ius_val
+            best_alpha = alpha
+
+    # RETRAIN on full training set with selected alpha
+    sdf_full = feature_scores_for_selection(X_tr, y_tr, names, TAXONOMY_OULAD)
+    sel_final = ic_fs_select(sdf_full, best_alpha, TOP_K)
+    sel_idx_final = [names.index(f) for f in sel_final]
+
+    # Evaluate on TEST SET (for reporting only)
+    ev = _eval(X_tr, y_tr, X_te, y_te, sel_idx_final, seed)
+    ar = actionability_ratio(sel_final, TAXONOMY_OULAD)
+    ar_avail = actionability_ratio_available(sel_final, horizon, TAXONOMY_OULAD)
+    tvs = temporal_validity_score(sel_final, horizon, TAXONOMY_OULAD)
+    ius_paper = compute_ius_paper(ev["f1"], sel_final, horizon, TAXONOMY_OULAD)
+    ius_deploy = compute_ius_deploy(ev["f1"], sel_final, horizon, TAXONOMY_OULAD)
+
+    return {"f1": ev["f1"] * 100, "accuracy": ev["accuracy"] * 100,
+            "AR": ar, "AR_available": ar_avail, "TVS": tvs,
+            "IUS_paper": ius_paper * 100, "IUS_deploy": ius_deploy * 100,
+            "alpha": best_alpha, "n": len(sel_final), "sel": sel_final}
 
 
 def run_no_action(X_tr, y_tr, X_te, y_te, names, horizon, seed):

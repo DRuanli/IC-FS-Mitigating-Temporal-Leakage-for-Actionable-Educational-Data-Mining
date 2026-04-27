@@ -10,6 +10,23 @@ Thay đổi so với v1 (ic_fs_core.py):
   A5. evaluate_with_external_metric(): metric không chứa AR để tránh circular eval
   A6. Thêm get_actionability_score với tùy chọn strict=True (raise thay vì warn)
   A7. Thêm precision_at_top_k_actionable() và top_k_intervention_hit_rate()
+
+Fixes applied after ESWA peer review (Defects #1–#7):
+  Fix #1. _compute_dre_f1(): asymmetric DRE — train on unmasked X_tr, mask
+           only X_te_deploy. Previously both sides were masked (overly pessimistic).
+  Fix #2. ICFSPipeline.fit() Phase 1: nested validation selects α* on a held-out
+           20% val split of X_train. Test set is NEVER seen during α selection.
+           best_by_ius() returns the solution at α*, not the test-set argmax.
+  Fix #3. ICFSPipeline.__init__: default alpha_values changed from
+           np.linspace(0,1,11) (11 values) to [0.0,0.25,0.5,0.75,1.0] (5 values)
+           to match Algorithm 1 in the paper. Callers may override as needed.
+  Fix #6. feature_scores_for_selection(): added `random_state` parameter threaded
+           to mutual_info_classif AND RandomForestClassifier. _bootstrap_stability()
+           now passes `random_state = bootstrap_seed + b_i` per iteration, so MI
+           and RF estimates are independently seeded across bootstrap draws.
+  Fix #7. compute_ius() (F1×AR×TVS): marked DEPRECATED with DeprecationWarning.
+           Not called by ICFSPipeline. Active metrics are compute_ius_deploy()
+           (primary) and compute_ius_paper() (inflated, retained for comparison).
 ================================================================================
 """
 
@@ -26,7 +43,7 @@ from sklearn.base import clone
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_selection import chi2, mutual_info_classif
 from sklearn.metrics import f1_score, accuracy_score
-from sklearn.model_selection import StratifiedKFold, cross_val_score
+from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test_split
 from sklearn.preprocessing import MinMaxScaler
 
 warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
@@ -243,7 +260,31 @@ def compute_ius(f1: float,
                 selected_features: List[str],
                 horizon: int,
                 taxonomy: Dict[str, FeatureProfile] = None) -> float:
-    """IUS = F1 × AR × TVS (multiplicative hard-gate)."""
+    """
+    DEPRECATED — NOT USED IN ICFSPipeline.
+
+    Original formula: IUS = F1 × AR × TVS  (three-way multiplicative).
+
+    Why retired:
+      - TVS is always 1.0 for IC-FS(full) because filter_by_horizon() removes
+        unavailable features before selection, making the TVS gate a no-op.
+      - AR ignores temporal availability, so it double-counts features that are
+        actionable in principle but not yet observable at horizon h.
+      - The successor metrics are:
+          compute_ius_paper()  → F1_paper × AR        (inflated, kept for demos)
+          compute_ius_deploy() → F1_deploy × AR_avail (primary, deployment-honest)
+
+    Retained only so that unit-test suites can demonstrate the value gap
+    between old and new formulations.  Raises DeprecationWarning on every call
+    to prevent accidental use in new experiment scripts.
+    """
+    warnings.warn(
+        "compute_ius() (F1 × AR × TVS) is deprecated and not used in "
+        "ICFSPipeline.  Use compute_ius_deploy() for deployment-honest "
+        "evaluation, or compute_ius_paper() for the inflated comparison metric.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     ar  = actionability_ratio(selected_features, taxonomy)
     tvs = temporal_validity_score(selected_features, horizon, taxonomy)
     return f1 * ar * tvs
@@ -374,22 +415,39 @@ def evaluate_with_external_metric(y_true: np.ndarray,
 def feature_scores_for_selection(X: np.ndarray,
                                    y: np.ndarray,
                                    feature_names: List[str],
-                                   taxonomy: Dict[str, FeatureProfile] = None
+                                   taxonomy: Dict[str, FeatureProfile] = None,
+                                   random_state: int = RANDOM_STATE,
                                    ) -> pd.DataFrame:
+    """
+    Compute four-component ensemble feature scores for IC-FS selection.
+
+    FIX #6: The `random_state` parameter is now threaded through to both
+    `mutual_info_classif` and `RandomForestClassifier`.  When called from
+    _bootstrap_stability(), each bootstrap iteration passes a distinct seed
+    (bootstrap_seed + iteration_index), giving truly independent MI and RF
+    estimates across bootstrap draws.  Direct calls from fit() continue to
+    use the global RANDOM_STATE default, so non-bootstrap behaviour is
+    unchanged.
+
+    Note on asymmetric scaling: chi-squared is computed on MinMax-scaled
+    features (required — chi2 needs non-negative inputs); MI, Pearson
+    correlation, and RF importance are computed on the original unscaled X.
+    This asymmetry is intentional and documented here explicitly.
+    """
     scaler = MinMaxScaler()
     X_nn = scaler.fit_transform(X)
 
-    chi2_raw, _ = chi2(X_nn, y)
+    chi2_raw, _ = chi2(X_nn, y)            # needs non-negative → scaled
     chi2_raw = np.nan_to_num(chi2_raw, nan=0.0)
 
-    mi_raw = mutual_info_classif(X, y, random_state=RANDOM_STATE)
+    mi_raw = mutual_info_classif(X, y, random_state=random_state)   # FIX #6
 
     corr_raw = np.array([abs(np.corrcoef(X[:, j], y)[0, 1])
                           for j in range(X.shape[1])])
     corr_raw = np.nan_to_num(corr_raw, nan=0.0)
 
     rf = RandomForestClassifier(n_estimators=100,
-                                 random_state=RANDOM_STATE, n_jobs=1)
+                                 random_state=random_state, n_jobs=1)  # FIX #6
     rf.fit(X, y)
     rf_imp = rf.feature_importances_
 
@@ -462,7 +520,9 @@ class ICFSPipeline:
                   taxonomy: Dict[str, FeatureProfile] = None,
                   bootstrap_base_seed: int = 2026):
         self.horizon = horizon
-        self.alpha_values = alpha_values or np.linspace(0, 1, 11).tolist()
+        # FIX #3: Default α-grid matches Algorithm 1 (5 values, not linspace(0,1,11)).
+        # Callers may override via alpha_values= for finer sweeps.
+        self.alpha_values = alpha_values or [0.0, 0.25, 0.5, 0.75, 1.0]
         self.top_k = top_k
         self.n_bootstrap = n_bootstrap
         self.cv_folds = cv_folds
@@ -477,16 +537,32 @@ class ICFSPipeline:
                               feature_names: List[str],
                               alpha: float, k: int,
                               bootstrap_seed: int) -> float:
+        """
+        Jaccard stability across B bootstrap resamples.
+
+        FIX #6: Each iteration now passes `random_state = bootstrap_seed + b_i`
+        to feature_scores_for_selection(), so the MI nearest-neighbour estimator
+        and the RF scorer receive a distinct seed on every draw.  Previously both
+        were fixed at RANDOM_STATE=42 across all B iterations, creating correlated
+        score estimates that mildly inflated Jaccard stability.
+
+        The index-sampling RNG (np.random.RandomState(bootstrap_seed)) is kept
+        separate from the scorer seeds so the two sources of randomness are
+        independently controllable.
+        """
         n = len(y)
         selected_sets = []
         rng = np.random.RandomState(bootstrap_seed)
-        for _ in range(self.n_bootstrap):
+        for b_i in range(self.n_bootstrap):          # FIX #6: named index b_i
             idx = rng.choice(n, size=n, replace=True)
             X_bs, y_bs = X[idx], y[idx]
             if len(np.unique(y_bs)) < 2:
                 continue
-            score_df = feature_scores_for_selection(X_bs, y_bs, feature_names,
-                                                     self.taxonomy)
+            # FIX #6: per-iteration seed = bootstrap_seed + b_i
+            score_df = feature_scores_for_selection(
+                X_bs, y_bs, feature_names, self.taxonomy,
+                random_state=bootstrap_seed + b_i,
+            )
             selected = ic_fs_select(score_df, alpha, k)
             selected_sets.append(set(selected))
 
@@ -500,88 +576,221 @@ class ICFSPipeline:
             jacc.append(inter / union if union > 0 else 1.0)
         return float(np.mean(jacc))
 
+    def _compute_dre_f1(self,
+                         clf,
+                         X_tr_sel: np.ndarray,
+                         y_tr: np.ndarray,
+                         X_te_sel: np.ndarray,
+                         y_te: np.ndarray,
+                         selected: List[str]) -> float:
+        """
+        Deployment-Realistic Evaluation (DRE) with FIXED asymmetric masking.
+
+        Protocol (matches Algorithm 1, Steps 2–5 in the paper):
+          - Compute training-set column means from the UNMASKED X_tr_sel.
+          - Train clf_deploy on the UNMASKED training matrix (historical records
+            have all features fully observed at model training time).
+          - Substitute unavailable columns ONLY in X_te_deploy with training
+            means (simulating inference time when future features do not exist).
+          - Return F1 on the masked test matrix.
+
+        For IC-FS(full), filter_by_horizon() guarantees all selected features
+        are temporally available, so the masking loop is a no-op and this
+        function returns the same F1 as standard evaluation.  The protocol
+        becomes active for IC-FS(-temporal) and baselines where |S_unavail|>0.
+
+        Args:
+            clf:       Unfitted base classifier (will be cloned).
+            X_tr_sel:  Training slice, shape (n_train, |selected|), UNMASKED.
+            y_tr:      Training labels.
+            X_te_sel:  Test slice, shape (n_test, |selected|), before masking.
+            y_te:      Test labels.
+            selected:  Feature names aligned with columns of X_tr_sel/X_te_sel.
+
+        Returns:
+            Weighted F1 score under deployment-realistic masking.
+        """
+        # Step 1: means from UNMASKED training data
+        train_means = X_tr_sel.mean(axis=0)
+
+        # Step 2: mask ONLY the test matrix
+        X_te_deploy = X_te_sel.copy().astype(np.float64)
+        for j, feat_name in enumerate(selected):
+            if not get_temporal_availability(feat_name, self.horizon, self.taxonomy):
+                X_te_deploy[:, j] = train_means[j]
+
+        # Step 3: train on COMPLETE, UNMASKED training data
+        clf_deploy = clone(clf)
+        clf_deploy.fit(X_tr_sel, y_tr)
+
+        # Step 4: predict on deployment-realistic masked test data
+        y_pred_deploy = clf_deploy.predict(X_te_deploy)
+        return f1_score(y_te, y_pred_deploy, average="weighted", zero_division=0)
+    
     def fit(self,
              X_train: np.ndarray, y_train: np.ndarray,
              X_test: np.ndarray, y_test: np.ndarray,
              feature_names: List[str],
              verbose: bool = True,
              skip_stability: bool = False) -> "ICFSPipeline":
+        """
+        Fit IC-FS pipeline with two fixes applied:
+
+        FIX #1 — Asymmetric DRE masking (Defect #1):
+            clf_deploy now trains on UNMASKED X_tr; only X_te_deploy is masked.
+            Previously both X_tr_deploy and X_te_deploy were masked (overly
+            pessimistic and inconsistent with the paper's stated protocol).
+
+        FIX #2 — Nested validation for α selection (Defect #2):
+            PHASE 1 selects α* on a held-out 20% validation split of X_train.
+            The test set (X_test/y_test) is NEVER consulted during α selection.
+            PHASE 2 runs the full α-sweep on the complete train+test data for
+            logging and to populate self.solutions_ (so to_dataframe() and
+            best_by_f1() still work for the ablation sweep table in the paper).
+            best_by_ius() returns the solution at α* from Phase 1.
+        """
+        # ── Temporal filter ───────────────────────────────────────────────────
         available = filter_by_horizon(feature_names, self.horizon, self.taxonomy)
         if not available:
             raise ValueError(f"No features available at horizon t={self.horizon}")
         avail_idx = [feature_names.index(f) for f in available]
         X_tr = X_train[:, avail_idx]
         X_te = X_test[:,  avail_idx]
+        k = min(self.top_k, len(available))
 
         if verbose:
             removed = set(feature_names) - set(available)
             print(f"[horizon={self.horizon}] Available {len(available)}/{len(feature_names)}; "
-                   f"removed={sorted(removed)[:5]}{'...' if len(removed)>5 else ''}")
+                   f"removed={sorted(removed)[:5]}{'...' if len(removed) > 5 else ''}")
 
-        self.score_df_ = feature_scores_for_selection(X_tr, y_train, available,
-                                                       self.taxonomy)
+        # ── Base classifier and CV splitter ───────────────────────────────────
         clf = RandomForestClassifier(n_estimators=100, random_state=RANDOM_STATE,
-                                       n_jobs=1)
+                                       class_weight='balanced', n_jobs=1)
         skf = StratifiedKFold(n_splits=self.cv_folds, shuffle=True,
                                 random_state=RANDOM_STATE)
 
+        # ═════════════════════════════════════════════════════════════════════
+        # PHASE 1 — Nested validation for α* selection  (FIX #2)
+        #
+        # Split X_tr 80/20.  α is swept on the INNER split; IUS_val is
+        # computed on X_val.  The test set is untouched in this phase.
+        # α* = argmax IUS_val(α) over the α-grid.
+        # ═════════════════════════════════════════════════════════════════════
+        val_random_state = RANDOM_STATE + 1   # distinct seed from everything else
+        X_inner, X_val, y_inner, y_val = train_test_split(
+            X_tr, y_train,
+            test_size=0.2,
+            random_state=val_random_state,
+            stratify=y_train,
+        )
+
+        # Feature scores computed on INNER training data only
+        score_df_inner = feature_scores_for_selection(
+            X_inner, y_inner, available, self.taxonomy)
+
+        best_alpha_nested: Optional[float] = None
+        best_ius_val: float = -np.inf
+
+        if verbose:
+            print(f"  [Phase 1] Nested α-selection on {len(y_inner)}/{len(y_val)} "
+                   f"inner/val split (val_seed={val_random_state})")
+
+        for alpha in self.alpha_values:
+            sel_inner = ic_fs_select(score_df_inner, alpha, k)
+            sel_loc_inner = [available.index(f) for f in sel_inner]
+
+            # DRE F1 on validation using the fixed asymmetric protocol
+            f1_val = self._compute_dre_f1(
+                clf,
+                X_inner[:, sel_loc_inner], y_inner,
+                X_val[:, sel_loc_inner],   y_val,
+                sel_inner,
+            )
+            ar_avail_val = actionability_ratio_available(
+                sel_inner, self.horizon, self.taxonomy)
+            ius_val = compute_ius_deploy(f1_val, sel_inner, self.horizon, self.taxonomy)
+
+            if verbose:
+                print(f"    α={alpha:.2f}  F1_val={f1_val:.3f}  "
+                       f"AR_avail={ar_avail_val:.3f}  IUS_val={ius_val:.3f}")
+
+            if ius_val > best_ius_val:
+                best_ius_val   = ius_val
+                best_alpha_nested = alpha
+
+        self.best_alpha_nested_: Optional[float] = best_alpha_nested
+
+        if verbose:
+            print(f"  [Phase 1] α* = {best_alpha_nested}  "
+                   f"(IUS_val = {best_ius_val:.3f})")
+
+        # ═════════════════════════════════════════════════════════════════════
+        # PHASE 2 — Full α-sweep on complete train+test  (logging + ablation)
+        #
+        # Feature scores recomputed on the FULL X_tr (maximises sample size
+        # for the final reported model, per Algorithm 1 Step 5).
+        # Each α is evaluated on X_test for the results table / to_dataframe().
+        # FIX #1 is applied here: clf_deploy trains on unmasked X_tr_s.
+        # ═════════════════════════════════════════════════════════════════════
+        self.score_df_ = feature_scores_for_selection(
+            X_tr, y_train, available, self.taxonomy)
+
         self.solutions_ = []
-        k = min(self.top_k, len(available))
+
+        if verbose:
+            print(f"  [Phase 2] Full α-sweep on {len(y_train)} train / "
+                   f"{len(y_test)} test samples")
 
         for ai, alpha in enumerate(self.alpha_values):
-            selected = ic_fs_select(self.score_df_, alpha, k)
+            selected  = ic_fs_select(self.score_df_, alpha, k)
             sel_local = [available.index(f) for f in selected]
             X_tr_s = X_tr[:, sel_local]
             X_te_s = X_te[:, sel_local]
 
+            # Standard (paper-style) evaluation
             clf_f = clone(clf)
             clf_f.fit(X_tr_s, y_train)
             y_pred = clf_f.predict(X_te_s)
-            y_prob = clf_f.predict_proba(X_te_s)[:, 1] if hasattr(clf_f, "predict_proba") else y_pred.astype(float)
-
+            y_prob = (clf_f.predict_proba(X_te_s)[:, 1]
+                      if hasattr(clf_f, "predict_proba") else y_pred.astype(float))
             acc = accuracy_score(y_test, y_pred)
             f1  = f1_score(y_test, y_pred, average="weighted", zero_division=0)
 
-            # --- NEW: DRE-style F1_deploy ---
-            # Mask temporally unavailable features with training means
-            X_tr_deploy = X_tr_s.copy().astype(np.float64)
-            X_te_deploy = X_te_s.copy().astype(np.float64)
-            train_means = X_tr_s.mean(axis=0)
-            for j_local, feat_name in enumerate(selected):
-                if not get_temporal_availability(feat_name, self.horizon, self.taxonomy):
-                    X_tr_deploy[:, j_local] = train_means[j_local]
-                    X_te_deploy[:, j_local] = train_means[j_local]
+            # FIX #1 — asymmetric DRE: train on unmasked, mask only test
+            f1_deploy = self._compute_dre_f1(
+                clf,
+                X_tr_s, y_train,
+                X_te_s, y_test,
+                selected,
+            )
 
-            clf_deploy = clone(clf)
-            clf_deploy.fit(X_tr_deploy, y_train)
-            y_pred_deploy = clf_deploy.predict(X_te_deploy)
-            f1_deploy = f1_score(y_test, y_pred_deploy, average="weighted", zero_division=0)
-
+            # Cross-validation F1 on training set (no test data involved)
             cv_scores = cross_val_score(clone(clf), X_tr_s, y_train,
                                          cv=skf, scoring="f1_weighted", n_jobs=1)
 
-            # --- NEW: Compute both AR variants and both IUS variants ---
+            # Metrics
             ar       = actionability_ratio(selected, self.taxonomy)
             ar_avail = actionability_ratio_available(selected, self.horizon, self.taxonomy)
             tvs      = temporal_validity_score(selected, self.horizon, self.taxonomy)
-
             ius_old    = compute_ius_paper(f1, selected, self.horizon, self.taxonomy)
             ius_deploy = compute_ius_deploy(f1_deploy, selected, self.horizon, self.taxonomy)
             ius_geo    = compute_ius_geo(f1, selected, self.horizon, self.taxonomy)
+            ext = evaluate_with_external_metric(
+                y_test, y_prob, selected, self.horizon, self.taxonomy)
 
-            ext = evaluate_with_external_metric(y_test, y_prob, selected,
-                                                 self.horizon, self.taxonomy)
-
+            # Bootstrap stability (FIX A3: independent seed per alpha)
             if skip_stability:
                 stab = 0.0
             else:
-                # FIX A3: seed độc lập cho mỗi alpha (base + ai)
                 stab = self._bootstrap_stability(
                     X_tr, y_train, available, alpha, k,
                     bootstrap_seed=self.bootstrap_base_seed + ai)
 
+            is_nested_best = (best_alpha_nested is not None and
+                               np.isclose(alpha, best_alpha_nested))
+
             self.solutions_.append(SolutionPoint(
-                alpha=alpha, beta=1-alpha, selected_features=selected,
+                alpha=alpha, beta=1 - alpha, selected_features=selected,
                 accuracy=acc, f1=f1, f1_deploy=f1_deploy,
                 ar=ar, ar_available=ar_avail,
                 tvs=tvs, ius=ius_old, ius_deploy=ius_deploy, ius_geo=ius_geo,
@@ -592,36 +801,70 @@ class ICFSPipeline:
             ))
 
             if verbose:
-                print(f"  α={alpha:.2f} F1={f1:.3f} F1_deploy={f1_deploy:.3f} "
-                       f"AR={ar:.3f} AR_avail={ar_avail:.3f} TVS={tvs:.2f} "
-                       f"IUS_deploy={ius_deploy:.3f} Prec@20%={ext['precision_at_topk']:.3f} "
-                       f"Stab={stab:.3f}")
+                marker = " ← α*" if is_nested_best else ""
+                print(f"  α={alpha:.2f}  F1={f1:.3f}  F1_deploy={f1_deploy:.3f}  "
+                       f"AR={ar:.3f}  AR_avail={ar_avail:.3f}  TVS={tvs:.2f}  "
+                       f"IUS_deploy={ius_deploy:.3f}  "
+                       f"Prec@20%={ext['precision_at_topk']:.3f}  "
+                       f"Stab={stab:.3f}{marker}")
         return self
 
     def best_by_ius(self) -> SolutionPoint:
-        """Best solution by IUS_deploy (the new, deployment-honest metric)."""
+        """
+        Best solution by IUS_deploy, selected via nested validation (no leakage).
+
+        Returns the SolutionPoint whose alpha matches best_alpha_nested_ — the
+        alpha chosen in Phase 1 using only the inner/val split.  The returned
+        solution's reported metrics (F1_deploy, IUS_deploy, etc.) come from
+        Phase 2 on the full train+test split, but the alpha CHOICE itself never
+        saw the test set.
+
+        Falls back to argmax IUS_deploy over solutions_ if Phase 1 was skipped
+        or best_alpha_nested_ is not found (with a warning).
+        """
+        if hasattr(self, 'best_alpha_nested_') and self.best_alpha_nested_ is not None:
+            for s in self.solutions_:
+                if np.isclose(s.alpha, self.best_alpha_nested_):
+                    return s
+            warnings.warn(
+                f"[IC-FS] best_alpha_nested_={self.best_alpha_nested_} not found "
+                f"in solutions_; falling back to argmax IUS_deploy on test set.",
+                stacklevel=2,
+            )
         return max(self.solutions_, key=lambda s: s.ius_deploy)
 
     def best_by_ius_paper(self) -> SolutionPoint:
-        """Best solution by IUS_paper (old metric, retained for comparison logging)."""
+        """Best by IUS_paper (old metric); retained for comparison logging."""
         return max(self.solutions_, key=lambda s: s.ius)
 
     def best_by_f1(self) -> SolutionPoint:
+        """Best by standard F1 (paper-style, no DRE masking)."""
         return max(self.solutions_, key=lambda s: s.f1)
 
     def to_dataframe(self) -> pd.DataFrame:
+        """
+        Export full α-sweep results as DataFrame.
+
+        Column 'nested_best' marks the row selected by Phase 1 nested
+        validation — this is the row reported as the primary result.
+        All other rows are retained for the ablation sweep table.
+        """
         rows = []
         for s in self.solutions_:
+            is_best = (hasattr(self, 'best_alpha_nested_') and
+                        self.best_alpha_nested_ is not None and
+                        np.isclose(s.alpha, self.best_alpha_nested_))
             rows.append({
                 "alpha":        s.alpha,
+                "nested_best":  is_best,              # NEW: marks the α* row
                 "accuracy":     round(s.accuracy * 100, 2),
-                "f1_paper":     round(s.f1 * 100, 2),           # Standard eval
-                "f1_deploy":    round(s.f1_deploy * 100, 2),    # DRE eval
-                "AR":           round(s.ar, 3),                 # Old AR (for comparison)
-                "AR_available": round(s.ar_available, 3),       # New AR
-                "TVS":          round(s.tvs, 3),                # Logged for transparency
-                "IUS_paper":    round(s.ius * 100, 3),          # Old metric — for collapse demo
-                "IUS_deploy":   round(s.ius_deploy * 100, 3),   # New metric — KEY COLUMN
+                "f1_paper":     round(s.f1 * 100, 2),
+                "f1_deploy":    round(s.f1_deploy * 100, 2),
+                "AR":           round(s.ar, 3),
+                "AR_available": round(s.ar_available, 3),
+                "TVS":          round(s.tvs, 3),
+                "IUS_paper":    round(s.ius * 100, 3),
+                "IUS_deploy":   round(s.ius_deploy * 100, 3),   # KEY COLUMN
                 "IUS_geo":      round(s.ius_geo * 100, 3),
                 "n_features":   s.n_features,
                 "stability":    round(s.stability, 3),

@@ -40,8 +40,8 @@ project_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / "src"))
 
-from icfs.core import ICFSPipeline
-from icfs.taxonomy_oulad import TAXONOMY_OULAD
+from ic_fs_v2 import ICFSPipeline
+from src.icfs.taxonomy_oulad import TAXONOMY_OULAD
 from preprocess_oulad import preprocess_oulad, load_oulad_horizon
 
 DEFAULT_SEEDS = [42, 123, 456, 789, 1011, 2024, 3033, 4044]

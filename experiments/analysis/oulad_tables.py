@@ -78,8 +78,8 @@ def table5_cross_dataset():
             "method": "IC-FS (full)",
             "F1_deploy_mean": uci_dre["f1_full_deploy"].mean(),
             "F1_deploy_std": uci_dre["f1_full_deploy"].std(ddof=1),
-            "IUS_deploy_mean": uci_dre["IUS_full_deploy"].mean(),
-            "IUS_deploy_std": uci_dre["IUS_full_deploy"].std(ddof=1),
+            "IUS_deploy_mean": uci_dre["IUS_deploy_full"].mean(),
+            "IUS_deploy_std": uci_dre["IUS_deploy_full"].std(ddof=1),
             "AR_mean": uci_dre["AR_full"].mean(),
         })
         rows.append({
@@ -87,8 +87,8 @@ def table5_cross_dataset():
             "method": "IC-FS (-temporal) ≈ DE-FS",
             "F1_deploy_mean": uci_dre["f1_notemp_deploy"].mean(),
             "F1_deploy_std": uci_dre["f1_notemp_deploy"].std(ddof=1),
-            "IUS_deploy_mean": uci_dre["IUS_notemp_deploy"].mean(),
-            "IUS_deploy_std": uci_dre["IUS_notemp_deploy"].std(ddof=1),
+            "IUS_deploy_mean": uci_dre["IUS_deploy_notemp"].mean(),
+            "IUS_deploy_std": uci_dre["IUS_deploy_notemp"].std(ddof=1),
             "AR_mean": uci_dre["AR_notemp"].mean(),
         })
 
@@ -97,9 +97,9 @@ def table5_cross_dataset():
         oulad_dre = load_csv_safe(RES_OULAD / f"dre_multi_oulad_h{h}.csv")
         if oulad_dre is None: continue
         for label, fcol, icol, arcol in [
-            ("IC-FS (full)", "f1_full_deploy", "IUS_full_deploy", "AR_full"),
+            ("IC-FS (full)", "f1_full_deploy", "IUS_deploy_full", "AR_full"),
             ("IC-FS (-temporal) ≈ DE-FS", "f1_notemp_deploy",
-             "IUS_notemp_deploy", "AR_notemp"),
+             "IUS_deploy_notemp", "AR_notemp"),
         ]:
             rows.append({
                 "dataset": "OULAD", "horizon": h, "n": len(oulad_dre),
@@ -158,6 +158,13 @@ def table6_oulad_baselines():
         print("  No data")
         return None
     df = pd.concat(rows, ignore_index=True)
+
+    # Normalize column names: use IUS_deploy if available, otherwise IUS
+    if "IUS_deploy" in df.columns and "IUS" not in df.columns:
+        df["IUS"] = df["IUS_deploy"]
+    if "f1_deploy" in df.columns and "f1" not in df.columns:
+        df["f1"] = df["f1_deploy"]
+
     df = df.sort_values(["horizon", "IUS"], ascending=[True, False])
 
     out_path = OUT_DIR / "table6_oulad_baselines.csv"
@@ -185,8 +192,8 @@ def table7_oulad_dre_stats():
 
         a_f1 = dre["f1_full_deploy"].values
         b_f1 = dre["f1_notemp_deploy"].values
-        a_ius = dre["IUS_full_deploy"].values
-        b_ius = dre["IUS_notemp_deploy"].values
+        a_ius = dre["IUS_deploy_full"].values
+        b_ius = dre["IUS_deploy_notemp"].values
 
         diff_f1 = a_f1 - b_f1
         diff_ius = a_ius - b_ius

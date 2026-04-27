@@ -38,13 +38,13 @@ project_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / "src"))
 
-from icfs.core import (
+from ic_fs_v2 import (
     actionability_ratio, actionability_ratio_available,
     temporal_validity_score, compute_ius,
     compute_ius_deploy, compute_ius_paper,
     filter_by_horizon, get_temporal_availability,
 )
-from icfs.taxonomy_oulad import TAXONOMY_OULAD
+from src.icfs.taxonomy_oulad import TAXONOMY_OULAD
 from preprocess_oulad import preprocess_oulad, load_oulad_horizon
 
 RANDOM_STATE = 42

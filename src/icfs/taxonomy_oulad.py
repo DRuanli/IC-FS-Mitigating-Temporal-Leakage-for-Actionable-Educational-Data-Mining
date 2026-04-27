@@ -89,11 +89,14 @@ def build_oulad_taxonomy() -> Dict[str, FeatureProfile]:
         FeatureProfile("date_registration", Tier.PRE_SEMESTER, [0, 1, 2],
             "Days before module start when student registered",
             "Early registration nudge; institution can intervene via comms"),
-        # CRITICAL FIX: date_unregistration is FUTURE at h=0 for students who withdraw later
-        # Only valid at h≥1 where early withdrawals have already occurred
-        FeatureProfile("date_unregistration", Tier.PRE_SEMESTER, [1, 2],
-            "Days to unregistration if occurred before horizon",
-            "Only valid at h≥1; temporal leakage at h=0 for future withdrawals"),
+        # CRITICAL FIX (ESWA Reviewer 2): date_unregistration is FUTURE event for enrolled students
+        # at h≥1. Only students who withdrew BEFORE the prediction horizon have known values.
+        # For the TARGET POPULATION (students we want to identify for intervention), this is
+        # phantom data that won't exist at deployment. Removing from all horizons to prevent
+        # temporal leakage. See ESWA review WEAKNESS #1.
+        # FeatureProfile("date_unregistration", Tier.PRE_SEMESTER, [],
+        #     "Days to unregistration - EXCLUDED: temporal leakage for enrolled students",
+        #     "Future event for target population; not available at any prediction horizon"),
 
         # ── TIER 2: During-semester observable (aggregated to horizon) ────────
         # Clickstream features — key early-warning signals

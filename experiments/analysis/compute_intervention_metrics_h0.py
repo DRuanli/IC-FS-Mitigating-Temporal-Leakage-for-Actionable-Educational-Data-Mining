@@ -21,13 +21,13 @@ project_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / "src"))
 
-from icfs.core import (
+from ic_fs_v2 import (
     filter_by_horizon,
     actionability_ratio_available,
     compute_ius_deploy,
     get_temporal_availability,
 )
-from icfs.taxonomy_oulad import TAXONOMY_OULAD
+from src.icfs.taxonomy_oulad import TAXONOMY_OULAD
 from experiments.oulad.preprocess_oulad import load_oulad_horizon, preprocess_oulad
 
 RNG_SEEDS = [42, 123, 456, 789, 1011, 2024, 3033, 4044]
