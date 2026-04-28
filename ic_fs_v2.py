@@ -520,7 +520,8 @@ class ICFSPipeline:
                   n_bootstrap: int = 50,
                   cv_folds: int = 10,
                   taxonomy: Dict[str, FeatureProfile] = None,
-                  bootstrap_base_seed: int = 2026):
+                  bootstrap_base_seed: int = 2026,
+                  random_state: int = RANDOM_STATE):
         self.horizon = horizon
         # FIX #3: Default α-grid matches Algorithm 1 (5 values, not linspace(0,1,11)).
         # Callers may override via alpha_values= for finer sweeps.
@@ -530,6 +531,8 @@ class ICFSPipeline:
         self.cv_folds = cv_folds
         self.taxonomy = taxonomy if taxonomy is not None else TAXONOMY_UCI
         self.bootstrap_base_seed = bootstrap_base_seed
+        # Issue 3 fix: store random_state so val_seed varies with the outer seed
+        self.random_state = random_state
         self.solutions_: List[SolutionPoint] = []
         self.score_df_: Optional[pd.DataFrame] = None
 
@@ -643,10 +646,10 @@ class ICFSPipeline:
                    f"removed={sorted(removed)[:5]}{'...' if len(removed) > 5 else ''}")
 
         # ── Base classifier and CV splitter ───────────────────────────────────
-        clf = RandomForestClassifier(n_estimators=100, random_state=RANDOM_STATE,
+        clf = RandomForestClassifier(n_estimators=100, random_state=self.random_state,
                                        class_weight='balanced', n_jobs=1)
         skf = StratifiedKFold(n_splits=self.cv_folds, shuffle=True,
-                                random_state=RANDOM_STATE)
+                                random_state=self.random_state)
 
         # ═════════════════════════════════════════════════════════════════════
         # PHASE 1 — Nested validation for α* selection  (FIX #2)
@@ -655,7 +658,7 @@ class ICFSPipeline:
         # computed on X_val.  The test set is untouched in this phase.
         # α* = argmax IUS_val(α) over the α-grid.
         # ═════════════════════════════════════════════════════════════════════
-        val_random_state = RANDOM_STATE + 1   # distinct seed from everything else
+        val_random_state = self.random_state + 1000  # Issue 3 fix: matches standalone script formula (seed+1000)
         X_inner, X_val, y_inner, y_val = train_test_split(
             X_tr, y_train,
             test_size=0.2,
@@ -805,12 +808,15 @@ class ICFSPipeline:
             for s in self.solutions_:
                 if np.isclose(s.alpha, self.best_alpha_nested_):
                     return s
-            warnings.warn(
+            raise RuntimeError(
                 f"[IC-FS] best_alpha_nested_={self.best_alpha_nested_} not found "
-                f"in solutions_; falling back to argmax IUS_deploy on test set.",
-                stacklevel=2,
+                f"in solutions_. Verify that alpha_values passed to fit() are "
+                f"identical to those swept in Phase 1. Falling back to test-set "
+                f"argmax would silently introduce leakage and is not permitted."
             )
-        return max(self.solutions_, key=lambda s: s.ius_deploy)
+        raise RuntimeError(
+            "[IC-FS] best_alpha_nested_ is not set. Call fit() before best_by_ius()."
+        )
 
     def best_by_ius_paper(self) -> SolutionPoint:
         """Best by IUS_paper (old metric); retained for comparison logging."""
@@ -827,6 +833,12 @@ class ICFSPipeline:
         Column 'nested_best' marks the row selected by Phase 1 nested
         validation — this is the row reported as the primary result.
         All other rows are retained for the ablation sweep table.
+
+        Issue 4 WARNING: IUS_deploy values for rows where nested_best=False are
+        computed from Phase 2 test-set evaluation and MUST NOT be used for model
+        selection. Always use best_by_ius() or filter to nested_best=True for the
+        reported model. Sorting non-best rows by IUS_deploy silently re-introduces
+        test-set leakage that Phase 1 nested validation was designed to prevent.
         """
         rows = []
         

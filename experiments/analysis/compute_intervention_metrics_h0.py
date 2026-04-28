@@ -31,7 +31,7 @@ from src.icfs.taxonomy_oulad import TAXONOMY_OULAD
 from experiments.oulad.preprocess_oulad import load_oulad_horizon, preprocess_oulad
 
 RNG_SEEDS = [42, 123, 456, 789, 1011, 2024, 3033, 4044]
-N_TREES = 60
+N_TREES = 100  # Issue 6 fix: match ICFSPipeline n_estimators=100 (paper §3.7)
 HORIZON = 0
 TOP_K_PCT = 0.20  # Top 20% for intervention
 
@@ -51,19 +51,17 @@ def precision_recall_at_top_k(y_true, y_proba, top_k_pct=0.20):
     n = len(y_true)
     k = int(n * top_k_pct)
 
-    # Sort by predicted risk (descending)
-    sorted_idx = np.argsort(y_proba)[::-1]
-    top_k_idx = sorted_idx[:k]
+    # Issue 2 fix: sort ASCENDING by P(Pass) → lowest P(Pass) = highest at-risk.
+    # Previously sorted descending, which ranked PASSING students first.
+    top_k_idx = np.argsort(y_proba)[:k]
 
-    # Students predicted at-risk in top k
-    y_pred_topk = y_true[top_k_idx]
-
-    # Precision: of students we intervene on, what fraction are truly at-risk?
-    tp = y_pred_topk.sum()
+    # Issue 2 fix: count Fail/Withdrawn (y=0) in top-k.
+    # Previously used y_true.sum() which counted y=1 (Pass) — the wrong class.
+    tp = (y_true[top_k_idx] == 0).sum()
     precision = tp / k if k > 0 else 0.0
 
-    # Recall: of all at-risk students, what fraction did we capture?
-    total_at_risk = y_true.sum()
+    # Recall: of all at-risk students (y=0), what fraction did we capture?
+    total_at_risk = (y_true == 0).sum()
     recall = tp / total_at_risk if total_at_risk > 0 else 0.0
 
     return precision, recall

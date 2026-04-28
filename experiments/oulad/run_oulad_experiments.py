@@ -64,6 +64,7 @@ def run_one_horizon_one_seed(df_raw, horizon: int, seed: int):
         n_bootstrap=N_BOOT,
         taxonomy=TAXONOMY_OULAD,
         alpha_values=ALPHA_GRID,
+        random_state=seed,  # Issue 3 fix: val_seed now varies with outer seed
     )
     pipe.fit(X_tr, y_tr, X_te, y_te, names, verbose=False)
     return pipe.to_dataframe(), pipe.best_by_ius()
