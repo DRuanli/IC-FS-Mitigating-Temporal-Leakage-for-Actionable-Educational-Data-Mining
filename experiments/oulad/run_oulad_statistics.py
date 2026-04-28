@@ -53,7 +53,7 @@ from preprocess_oulad import preprocess_oulad, load_oulad_horizon
 
 RNG_SEEDS = [42, 123, 456, 789, 1011, 2024, 3033, 4044]
 ALPHA_GRID = [0.0, 0.25, 0.5, 0.75, 1.0]
-TOP_K = 7
+TOP_K = 10
 N_TREES = 100 
 N_BOOT_STAB = 4
 
