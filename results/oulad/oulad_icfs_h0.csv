@@ -1,0 +1,6 @@
+alpha,nested_best,accuracy,f1_paper,f1_deploy,AR,AR_available,TVS,IUS_paper,IUS_deploy,IUS_geo,n_features,stability,prec@20%,recall@20%,cv_mean,cv_std,selected
+0.0,False,54.18,53.84,53.84,0.2,0.2,1.0,10.767,10.767,47.574,5,1.0,0.631,0.239,53.93,0.85,date_registration|num_of_prev_attempts|studied_credits|gender_F|gender_M
+0.25,True,55.41,55.4,55.4,0.2,0.2,1.0,11.081,11.081,48.031,5,0.577,0.642,0.243,55.75,0.81,date_registration|highest_education_Lower Than A Level|studied_credits|highest_education_A Level or Equivalent|num_of_prev_attempts
+0.5,False,55.41,55.4,55.4,0.2,0.2,1.0,11.081,11.081,48.031,5,0.595,0.642,0.243,55.75,0.81,date_registration|highest_education_Lower Than A Level|studied_credits|highest_education_A Level or Equivalent|num_of_prev_attempts
+0.75,False,55.41,55.4,55.4,0.2,0.2,1.0,11.081,11.081,48.031,5,0.549,0.642,0.243,55.75,0.81,date_registration|highest_education_Lower Than A Level|studied_credits|highest_education_A Level or Equivalent|num_of_prev_attempts
+1.0,False,55.48,55.48,55.48,0.2,0.2,1.0,11.097,11.097,48.054,5,0.606,0.642,0.243,55.75,0.77,highest_education_Lower Than A Level|studied_credits|date_registration|highest_education_A Level or Equivalent|num_of_prev_attempts
