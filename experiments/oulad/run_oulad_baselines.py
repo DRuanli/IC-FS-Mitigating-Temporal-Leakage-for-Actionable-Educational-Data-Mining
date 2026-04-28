@@ -44,6 +44,7 @@ from ic_fs_v2 import (
     temporal_validity_score, compute_ius,
     compute_ius_deploy, compute_ius_paper,
     filter_by_horizon, get_temporal_availability,
+    apply_dre_mask,
 )
 from src.icfs.taxonomy_oulad import TAXONOMY_OULAD
 from preprocess_oulad import preprocess_oulad, load_oulad_horizon
@@ -172,16 +173,14 @@ def run_nsga2(X_tr, y_tr, X_te, y_te, names, horizon,
         f1 = f1_score(y_te, y_pred, average='weighted', zero_division=0)
         acc = accuracy_score(y_te, y_pred)
 
-        # DRE masking for f1_deploy (should be same as f1 since temporal filter applied)
-        X_tr_deploy = X_tr_a[:, loc].copy().astype(np.float64)
-        X_te_deploy = X_te_a[:, loc].copy().astype(np.float64)
-        train_means = X_tr_a[:, loc].mean(axis=0)
-        for j_local, feat_name in enumerate(sel):
-            if not get_temporal_availability(feat_name, horizon, TAXONOMY_OULAD):
-                X_tr_deploy[:, j_local] = train_means[j_local]
-                X_te_deploy[:, j_local] = train_means[j_local]
+        # DRE masking — asymmetric: train on unmasked, mask only X_te.
+        # Loop is a no-op here (temporal filter upstream ensures all sel features
+        # are available), but we call apply_dre_mask for code uniformity and
+        # future safety if the filter is ever removed or relaxed.
+        _, X_te_deploy = apply_dre_mask(
+            X_tr_a[:, loc], X_te_a[:, loc], sel, horizon, TAXONOMY_OULAD)
         clf_deploy = clone(final_clf)
-        clf_deploy.fit(X_tr_deploy, y_tr)
+        clf_deploy.fit(X_tr_a[:, loc], y_tr)   # train on UNMASKED
         y_pred_deploy = clf_deploy.predict(X_te_deploy)
         y_proba_deploy = clf_deploy.predict_proba(X_te_deploy)[:, 1] if len(clf_deploy.classes_) > 1 else y_pred_deploy.astype(float)
         f1_deploy = f1_score(y_te, y_pred_deploy, average='weighted', zero_division=0)
@@ -259,16 +258,11 @@ def run_stability_selection(X_tr, y_tr, X_te, y_te, names, horizon,
     f1 = f1_score(y_te, y_pred, average='weighted', zero_division=0)
     acc = accuracy_score(y_te, y_pred)
 
-    # DRE masking for f1_deploy
-    X_tr_deploy = X_tr_a[:, order].copy().astype(np.float64)
-    X_te_deploy = X_te_a[:, order].copy().astype(np.float64)
-    train_means = X_tr_a[:, order].mean(axis=0)
-    for j_local, feat_name in enumerate(sel):
-        if not get_temporal_availability(feat_name, horizon, TAXONOMY_OULAD):
-            X_tr_deploy[:, j_local] = train_means[j_local]
-            X_te_deploy[:, j_local] = train_means[j_local]
+    # DRE masking — asymmetric (see apply_dre_mask docstring).
+    _, X_te_deploy = apply_dre_mask(
+        X_tr_a[:, order], X_te_a[:, order], sel, horizon, TAXONOMY_OULAD)
     rf_deploy = clone(rf)
-    rf_deploy.fit(X_tr_deploy, y_tr)
+    rf_deploy.fit(X_tr_a[:, order], y_tr)   # train on UNMASKED
     y_pred_deploy = rf_deploy.predict(X_te_deploy)
     y_proba_deploy = rf_deploy.predict_proba(X_te_deploy)[:, 1] if len(rf_deploy.classes_) > 1 else y_pred_deploy.astype(float)
     f1_deploy = f1_score(y_te, y_pred_deploy, average='weighted', zero_division=0)
@@ -342,16 +336,11 @@ def run_boruta(X_tr, y_tr, X_te, y_te, names, horizon, max_iter=40):
     f1 = f1_score(y_te, y_pred, average='weighted', zero_division=0)
     acc = accuracy_score(y_te, y_pred)
 
-    # DRE masking for f1_deploy
-    X_tr_deploy = X_tr_a[:, loc].copy().astype(np.float64)
-    X_te_deploy = X_te_a[:, loc].copy().astype(np.float64)
-    train_means = X_tr_a[:, loc].mean(axis=0)
-    for j_local, feat_name in enumerate(sel):
-        if not get_temporal_availability(feat_name, horizon, TAXONOMY_OULAD):
-            X_tr_deploy[:, j_local] = train_means[j_local]
-            X_te_deploy[:, j_local] = train_means[j_local]
+    # DRE masking — asymmetric (see apply_dre_mask docstring).
+    _, X_te_deploy = apply_dre_mask(
+        X_tr_a[:, loc], X_te_a[:, loc], sel, horizon, TAXONOMY_OULAD)
     rf_deploy = clone(rf)
-    rf_deploy.fit(X_tr_deploy, y_tr)
+    rf_deploy.fit(X_tr_a[:, loc], y_tr)   # train on UNMASKED
     y_pred_deploy = rf_deploy.predict(X_te_deploy)
     y_proba_deploy = rf_deploy.predict_proba(X_te_deploy)[:, 1] if len(rf_deploy.classes_) > 1 else y_pred_deploy.astype(float)
     f1_deploy = f1_score(y_te, y_pred_deploy, average='weighted', zero_division=0)

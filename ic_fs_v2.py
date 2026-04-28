@@ -316,6 +316,51 @@ def compute_ius_paper(
     ar = actionability_ratio(selected_features, taxonomy)
     return f1_paper * ar
 
+
+def apply_dre_mask(
+    X_tr_sel: np.ndarray,
+    X_te_sel: np.ndarray,
+    selected: List[str],
+    horizon: int,
+    taxonomy: Dict[str, FeatureProfile] = None,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Shared asymmetric DRE masking utility.
+
+    This is the single authoritative implementation of the DRE protocol.
+    All experiment scripts (run_oulad_baselines.py, run_oulad_statistics.py,
+    run_oulad_dre.py) must call this function instead of duplicating the
+    masking loop, to guarantee protocol uniformity.
+
+    Protocol:
+      - Training data is left UNMASKED (historical records have full observations).
+      - Columns in X_te that are temporally unavailable at `horizon` are replaced
+        with the corresponding training-set column means.
+      - The returned X_tr_sel is the same object (unchanged); X_te_deploy is a copy.
+
+    For methods that applied filter_by_horizon() upstream (IC-FS full,
+    NSGA-II, Boruta, Stability Selection), every selected feature is already
+    temporally available, so the inner loop is a no-op and X_te_deploy ≡ X_te_sel.
+    The function is still called for code uniformity and future safety.
+
+    Args:
+        X_tr_sel: Training slice, shape (n_train, |selected|). Not modified.
+        X_te_sel: Test slice, shape (n_test, |selected|). Source for copy.
+        selected: Feature names aligned with columns of X_tr_sel / X_te_sel.
+        horizon:  Deployment time point (0, 1, 2).
+        taxonomy: Feature taxonomy (defaults to TAXONOMY_UCI).
+
+    Returns:
+        (X_tr_sel, X_te_deploy): X_tr unchanged; X_te_deploy has masked columns.
+    """
+    tax = taxonomy if taxonomy is not None else TAXONOMY_UCI
+    train_means = X_tr_sel.mean(axis=0)
+    X_te_deploy = X_te_sel.copy().astype(np.float64)
+    for j, feat_name in enumerate(selected):
+        if not get_temporal_availability(feat_name, horizon, tax):
+            X_te_deploy[:, j] = train_means[j]
+    return X_tr_sel, X_te_deploy
+
 def precision_at_top_k_actionable(y_true: np.ndarray,
                                     y_prob: np.ndarray,
                                     k_pct: float = 0.2) -> float:
@@ -784,6 +829,7 @@ class ICFSPipeline:
         All other rows are retained for the ablation sweep table.
         """
         rows = []
+        
         for s in self.solutions_:
             is_best = (hasattr(self, 'best_alpha_nested_') and
                         self.best_alpha_nested_ is not None and

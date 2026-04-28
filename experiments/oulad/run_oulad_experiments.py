@@ -90,8 +90,8 @@ def run_single_seed_full_sweep(horizons, out_dir, seed=42):
         out_path = out_dir / f"oulad_icfs_h{h}.csv"
         results_df.to_csv(out_path, index=False)
         print(f"  Saved {out_path}")
-        print(f"  Best α={best_sol.alpha:.2f}  F1={best_sol.f1*100:.2f}  "
-               f"AR={best_sol.ar:.3f}  IUS={best_sol.ius*100:.2f}  "
+        print(f"  Best α={best_sol.alpha:.2f}  F1_deploy={best_sol.f1_deploy*100:.2f}  "
+               f"AR_avail={best_sol.ar_available:.3f}  IUS_deploy={best_sol.ius_deploy*100:.2f}  "
                f"Stab={best_sol.stability:.3f}")
         print(f"  Top-5 features: {best_sol.selected_features[:5]}")
 
@@ -119,10 +119,12 @@ def run_multi_seed(horizons, seeds, out_dir):
                     "seed": s, "horizon": h,
                     "alpha_best": best_sol.alpha,
                     "accuracy": best_sol.accuracy * 100,
-                    "f1": best_sol.f1 * 100,
+                    "f1_paper": best_sol.f1 * 100,
+                    "f1_deploy": best_sol.f1_deploy * 100,        # FIX: was missing
                     "AR": best_sol.ar,
+                    "AR_available": best_sol.ar_available,         # FIX: was missing
                     "TVS": best_sol.tvs,
-                    "IUS": best_sol.ius * 100,
+                    "IUS_deploy": best_sol.ius_deploy * 100,      # FIX: was best_sol.ius (deprecated)
                     "IUS_geo": best_sol.ius_geo * 100,
                     "n_features": best_sol.n_features,
                     "stability": best_sol.stability,
@@ -133,8 +135,9 @@ def run_multi_seed(horizons, seeds, out_dir):
                     "selected": "|".join(best_sol.selected_features),
                 })
                 print(f"  seed={s:4d} ({time.time()-t_s:5.0f}s): "
-                       f"α*={best_sol.alpha:.2f} F1={best_sol.f1*100:5.2f} "
-                       f"AR={best_sol.ar:.3f} IUS={best_sol.ius*100:5.2f}")
+                       f"α*={best_sol.alpha:.2f} F1_deploy={best_sol.f1_deploy*100:5.2f} "
+                       f"AR_avail={best_sol.ar_available:.3f} "
+                       f"IUS_deploy={best_sol.ius_deploy*100:5.2f}")
             except Exception as e:
                 print(f"  seed={s} FAILED: {e}")
 
@@ -144,7 +147,7 @@ def run_multi_seed(horizons, seeds, out_dir):
 
         if len(df) >= 2:
             print(f"\n  Multi-seed summary (n={len(df)}):")
-            for col in ["f1", "AR", "IUS", "stability"]:
+            for col in ["f1_deploy", "AR_available", "IUS_deploy", "stability"]:
                 v = df[col].values
                 print(f"    {col:<10}: mean={v.mean():6.2f}  std={v.std(ddof=1):5.2f}  "
                        f"95%CI=[{np.percentile(v,2.5):.2f}, {np.percentile(v,97.5):.2f}]")

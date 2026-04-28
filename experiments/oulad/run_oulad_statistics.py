@@ -46,6 +46,7 @@ from ic_fs_v2 import (
     temporal_validity_score, compute_ius,
     compute_ius_deploy, compute_ius_paper,
     filter_by_horizon,
+    apply_dre_mask,
 )
 from src.icfs.taxonomy_oulad import TAXONOMY_OULAD
 from preprocess_oulad import preprocess_oulad, load_oulad_horizon
@@ -67,6 +68,35 @@ def _eval(X_tr, y_tr, X_te, y_te, sel_idx, seed, cv_folds=3):
     f1 = f1_score(y_te, y_pred, average='weighted', zero_division=0)
     skf = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=seed)
     cv = cross_val_score(clone(rf), X_tr[:, sel_idx], y_tr, cv=skf,
+                          scoring='f1_weighted', n_jobs=-1)
+    return {"accuracy": acc, "f1": f1, "cv_mean": cv.mean(), "cv_std": cv.std()}
+
+
+def _eval_dre(X_tr, y_tr, X_te, y_te, sel_names, sel_idx, horizon, seed, cv_folds=3):
+    """
+    DRE-honest evaluation: train on unmasked X_tr, predict on DRE-masked X_te.
+
+    Uses apply_dre_mask() — the single authoritative masking utility — so that
+    the protocol is identical to _compute_dre_f1() in ICFSPipeline and to the
+    masking applied in run_oulad_baselines.py.
+
+    This must be used instead of _eval() for any variant that does NOT apply
+    filter_by_horizon() upstream (i.e. IC-FS(-temporal) / run_no_temporal).
+    For filter-upstream variants, F1_deploy ≡ F1_paper so _eval() is fine,
+    but calling _eval_dre() there is also correct and preferred for uniformity.
+    """
+    X_tr_sel = X_tr[:, sel_idx]
+    X_te_sel = X_te[:, sel_idx]
+    _, X_te_deploy = apply_dre_mask(X_tr_sel, X_te_sel, sel_names, horizon, TAXONOMY_OULAD)
+
+    rf = RandomForestClassifier(n_estimators=N_TREES, random_state=seed,
+                                  n_jobs=-1, class_weight='balanced')
+    rf.fit(X_tr_sel, y_tr)                  # train on UNMASKED
+    y_pred = rf.predict(X_te_deploy)        # predict on DRE-masked test
+    acc = accuracy_score(y_te, y_pred)
+    f1 = f1_score(y_te, y_pred, average='weighted', zero_division=0)
+    skf = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=seed)
+    cv = cross_val_score(clone(rf), X_tr_sel, y_tr, cv=skf,
                           scoring='f1_weighted', n_jobs=-1)
     return {"accuracy": acc, "f1": f1, "cv_mean": cv.mean(), "cv_std": cv.std()}
 
@@ -154,8 +184,11 @@ def run_no_temporal(X_tr, y_tr, X_te, y_te, names, horizon, seed):
     sel_final = ic_fs_select(sdf_full, best_alpha, TOP_K)
     sel_idx_final = [names.index(f) for f in sel_final]
 
-    # Evaluate on TEST SET (for reporting only)
-    ev = _eval(X_tr, y_tr, X_te, y_te, sel_idx_final, seed)
+    # Evaluate on TEST SET with DRE protocol (for reporting only)
+    # FIX: _eval_dre instead of _eval — IC-FS(-temporal) does NOT apply
+    # filter_by_horizon, so future features may be selected. F1_deploy can
+    # differ from F1_paper when those features are masked at inference time.
+    ev = _eval_dre(X_tr, y_tr, X_te, y_te, sel_final, sel_idx_final, horizon, seed)
     ar = actionability_ratio(sel_final, TAXONOMY_OULAD)
     ar_avail = actionability_ratio_available(sel_final, horizon, TAXONOMY_OULAD)
     tvs = temporal_validity_score(sel_final, horizon, TAXONOMY_OULAD)

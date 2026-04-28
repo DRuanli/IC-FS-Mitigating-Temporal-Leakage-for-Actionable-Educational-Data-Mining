@@ -46,9 +46,10 @@ sys.path.insert(0, str(project_root / "src"))
 from ic_fs_v2 import (
     feature_scores_for_selection, ic_fs_select,
     actionability_ratio, actionability_ratio_available,
-    temporal_validity_score, compute_ius,
+    temporal_validity_score,
     compute_ius_deploy, compute_ius_paper,
-    filter_by_horizon, get_temporal_availability,
+    filter_by_horizon,
+    apply_dre_mask,              # shared asymmetric DRE utility
 )
 from src.icfs.taxonomy_oulad import TAXONOMY_OULAD
 from preprocess_oulad import preprocess_oulad, load_oulad_horizon
@@ -158,7 +159,8 @@ def select_best_ius(X_tr, y_tr, X_te, y_te, names, horizon, random_state,
         # Evaluate on VALIDATION set (inner), not test set
         f1_val = fit_predict_f1(X_tr_inner, y_tr_inner, X_val_inner, y_val_inner,
                                   sel_local, val_seed)
-        ius_val = compute_ius(f1_val, sel, horizon, TAXONOMY_OULAD)
+        # FIX: use deployment-honest IUS_deploy, not deprecated compute_ius
+        ius_val = compute_ius_deploy(f1_val, sel, horizon, TAXONOMY_OULAD)
         if ius_val > best_ius_val:
             best_ius_val, best_alpha = ius_val, alpha
 
@@ -167,13 +169,13 @@ def select_best_ius(X_tr, y_tr, X_te, y_te, names, horizon, random_state,
                                                    TAXONOMY_OULAD)
     final_sel = ic_fs_select(score_df_full, best_alpha, min(TOP_K, len(feat_use)))
 
-    # Compute final IUS on test set (for reporting only, NOT for alpha selection)
+    # Evaluate F1 on test set (for reporting only, NOT for alpha selection)
+    # FIX: return final_f1 directly — avoids fragile back-computation from IUS
     final_sel_local = [feat_use.index(f) for f in final_sel]
     final_f1 = fit_predict_f1(X_tr_use, y_tr, X_te_use, y_te,
                                 final_sel_local, random_state)
-    final_ius = compute_ius(final_f1, final_sel, horizon, TAXONOMY_OULAD)
 
-    return final_sel, best_alpha, final_ius
+    return final_sel, best_alpha, final_f1
 
 
 def evaluate_under_dre(X_tr, y_tr, X_te, y_te, selected_features, horizon,
@@ -195,24 +197,20 @@ def evaluate_under_dre(X_tr, y_tr, X_te, y_te, selected_features, horizon,
         y_proba: predicted probabilities for at-risk class (for Precision@k)
     """
     sel_idx = [names.index(f) for f in selected_features]
+    assert len(selected_features) == len(sel_idx), \
+        "selected_features length must match derived sel_idx"
     X_tr_s = X_tr[:, sel_idx].astype(np.float64).copy()
     X_te_s = X_te[:, sel_idx].astype(np.float64).copy()
 
-    # Compute train-column means BEFORE any masking
-    train_means = X_tr_s.mean(axis=0)
+    # FIX: use shared apply_dre_mask — single authoritative asymmetric masking utility.
+    # Trains on unmasked X_tr_s; masks only inference-time (X_te) columns.
+    _, X_te_deploy = apply_dre_mask(X_tr_s, X_te_s, selected_features,
+                                     horizon, TAXONOMY_OULAD)
 
-    # NEW: Train on COMPLETE data (no masking in training)
-    # In real deployment, we train on historical data where all values are known
     rf = RandomForestClassifier(n_estimators=N_TREES,
                                   random_state=random_state,
                                   n_jobs=-1, class_weight='balanced')
     rf.fit(X_tr_s, y_tr)  # ← Train on UNMASKED data
-
-    # CORRECTED: Apply masking ONLY at inference time (test set)
-    X_te_deploy = X_te_s.copy()
-    for j, f in enumerate(selected_features):
-        if not get_temporal_availability(f, horizon, TAXONOMY_OULAD):
-            X_te_deploy[:, j] = train_means[j]  # ← Mask only at inference
 
     # Predict on deployment-realistic (masked) test data
     y_pred = rf.predict(X_te_deploy)
@@ -228,22 +226,14 @@ def run_one_seed(df_raw, seed, horizon):
                                                   random_state=seed, stratify=y)
 
     # IC-FS(full) — temporal filter on
-    sel_full, alpha_full, ius_full_paper = select_best_ius(
+    sel_full, alpha_full, f1_full_paper = select_best_ius(
         X_tr, y_tr, X_te, y_te, names, horizon, seed,
         apply_temporal_filter=True)
-    f1_full_paper = ius_full_paper / (
-        actionability_ratio(sel_full, TAXONOMY_OULAD)
-        * temporal_validity_score(sel_full, horizon, TAXONOMY_OULAD)
-        + 1e-10)
 
     # IC-FS(-temporal) — no filter (DE-FS analogue)
-    sel_notemp, alpha_notemp, ius_notemp_paper = select_best_ius(
+    sel_notemp, alpha_notemp, f1_notemp_paper = select_best_ius(
         X_tr, y_tr, X_te, y_te, names, horizon, seed,
         apply_temporal_filter=False)
-    f1_notemp_paper = ius_notemp_paper / (
-        actionability_ratio(sel_notemp, TAXONOMY_OULAD)
-        * temporal_validity_score(sel_notemp, horizon, TAXONOMY_OULAD)
-        + 1e-10)
 
     # DRE: mask + retrain + evaluate
     f1_full_deploy, y_proba_full = evaluate_under_dre(X_tr, y_tr, X_te, y_te,
@@ -270,6 +260,10 @@ def run_one_seed(df_raw, seed, horizon):
     # ─── NEW: correct IUS_deploy ────────────────────────────────
     ius_full_deploy_new = compute_ius_deploy(f1_full_deploy, sel_full, horizon, TAXONOMY_OULAD)
     ius_notemp_deploy_new = compute_ius_deploy(f1_notemp_deploy, sel_notemp, horizon, TAXONOMY_OULAD)
+
+    # FIX: paper-style IUS computed from returned f1_paper, not back-derived from old IUS
+    ius_full_paper = compute_ius_paper(f1_full_paper, sel_full, horizon, TAXONOMY_OULAD)
+    ius_notemp_paper = compute_ius_paper(f1_notemp_paper, sel_notemp, horizon, TAXONOMY_OULAD)
 
     # Leakage diagnostics
     tau_full = 1.0 - (ar_available_full / ar_full) if ar_full > 0 else 0.0
