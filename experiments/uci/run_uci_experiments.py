@@ -50,7 +50,7 @@ from preprocess_uci import load_uci_dataset, preprocess_uci, split_uci
 
 DEFAULT_SEEDS = [42, 123, 456, 789, 1011, 2024, 3033, 4044]
 ALPHA_GRID = [0.0, 0.25, 0.5, 0.75, 1.0]
-TOP_K = 5
+TOP_K = 7
 N_BOOT = 20
 
 

@@ -1,0 +1,6 @@
+alpha,nested_best,accuracy,f1_paper,f1_deploy,AR,AR_available,TVS,IUS_paper,IUS_deploy,IUS_geo,n_features,stability,prec@20%,recall@20%,cv_mean,cv_std,selected
+0.0,True,75.38,74.85,74.85,1.0,1.0,1.0,74.848,74.848,90.794,7,1.0,0.192,0.25,76.78,4.16,studytime|schoolsup|famsup|paid|activities|nursery|higher
+0.25,False,69.23,72.63,72.63,1.0,1.0,1.0,72.634,72.634,89.891,7,0.717,0.231,0.3,73.66,5.22,higher|studytime|internet|romantic|schoolsup|nursery|famsup
+0.5,False,69.23,72.63,72.63,1.0,1.0,1.0,72.634,72.634,89.891,7,0.639,0.231,0.3,73.66,5.22,higher|studytime|internet|romantic|schoolsup|nursery|famsup
+0.75,False,76.15,76.82,76.82,0.629,0.629,1.0,48.287,48.287,78.453,7,0.478,0.231,0.3,84.22,3.54,failures|higher|school|studytime|Dalc|freetime|internet
+1.0,False,74.62,75.33,75.33,0.243,0.243,1.0,18.293,18.293,56.767,7,0.505,0.231,0.3,83.07,4.75,failures|school|higher|age|Medu|Dalc|Fedu

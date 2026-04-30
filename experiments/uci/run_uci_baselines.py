@@ -51,7 +51,7 @@ from src.icfs.taxonomy_uci import TAXONOMY_UCI
 from preprocess_uci import load_uci_dataset, preprocess_uci, split_uci
 
 RANDOM_STATE = 42
-TOP_K = 5  # UCI uses smaller k than OULAD
+TOP_K = 10  # UCI uses smaller k than OULAD
 N_TREES = 100
 
 

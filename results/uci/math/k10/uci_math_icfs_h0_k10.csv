@@ -1,0 +1,6 @@
+alpha,nested_best,accuracy,f1_paper,f1_deploy,AR,AR_available,TVS,IUS_paper,IUS_deploy,IUS_geo,n_features,stability,prec@20%,recall@20%,cv_mean,cv_std,selected
+0.0,False,62.03,59.91,59.91,0.97,0.97,1.0,58.108,58.108,83.447,10,1.0,0.467,0.269,59.03,8.02,studytime|schoolsup|famsup|paid|activities|nursery|higher|internet|romantic|famrel
+0.25,False,58.23,54.59,54.59,0.97,0.97,1.0,52.95,52.95,80.901,10,0.888,0.267,0.154,59.09,5.4,studytime|romantic|schoolsup|higher|paid|activities|famsup|internet|nursery|goout
+0.5,True,58.23,54.59,54.59,0.97,0.97,1.0,52.95,52.95,80.901,10,0.838,0.267,0.154,59.09,5.4,studytime|romantic|schoolsup|higher|paid|activities|famsup|internet|nursery|goout
+0.75,False,64.56,63.19,63.19,0.84,0.84,1.0,53.084,53.084,80.969,10,0.557,0.467,0.269,63.23,7.43,failures|goout|studytime|romantic|schoolsup|higher|paid|health|activities|famsup
+1.0,False,64.56,63.72,63.72,0.44,0.44,1.0,28.039,28.039,65.452,10,0.282,0.467,0.269,69.1,4.75,failures|goout|studytime|age|health|romantic|reason_course|schoolsup|Mjob_teacher|Fedu

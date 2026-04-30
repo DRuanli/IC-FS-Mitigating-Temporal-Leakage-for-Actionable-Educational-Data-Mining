@@ -1,0 +1,6 @@
+alpha,nested_best,accuracy,f1_paper,f1_deploy,AR,AR_available,TVS,IUS_paper,IUS_deploy,IUS_geo,n_features,stability,prec@20%,recall@20%,cv_mean,cv_std,selected
+0.0,False,82.31,79.37,79.37,0.88,0.88,1.0,69.849,69.849,88.726,15,1.0,0.269,0.35,80.9,4.14,studytime|schoolsup|famsup|paid|activities|nursery|higher|internet|romantic|famrel|freetime|goout|Dalc|Walc|health
+0.25,False,82.31,78.54,78.54,0.88,0.88,1.0,69.117,69.117,88.415,15,0.923,0.231,0.3,80.27,3.09,higher|studytime|romantic|internet|schoolsup|paid|famsup|activities|nursery|Walc|Dalc|absences|freetime|goout|famrel
+0.5,True,84.62,84.28,84.28,0.833,0.833,1.0,70.233,70.233,88.889,15,0.908,0.5,0.65,90.78,3.51,higher|studytime|romantic|internet|schoolsup|paid|famsup|activities|nursery|Walc|Dalc|absences|freetime|G1|goout
+0.75,False,86.15,86.15,86.15,0.74,0.74,1.0,63.754,63.754,86.067,15,0.8,0.423,0.55,91.34,2.93,G1|higher|failures|studytime|school|romantic|internet|schoolsup|paid|famsup|activities|Walc|nursery|Dalc|absences
+1.0,False,82.31,82.12,82.12,0.273,0.273,1.0,22.446,22.446,60.774,15,0.493,0.462,0.6,90.34,2.7,G1|failures|school|higher|Medu|Fedu|Walc|Mjob_at_home|Dalc|reason_reputation|studytime|Mjob_teacher|age|absences|address

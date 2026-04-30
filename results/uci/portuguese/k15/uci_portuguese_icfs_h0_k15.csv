@@ -1,0 +1,6 @@
+alpha,nested_best,accuracy,f1_paper,f1_deploy,AR,AR_available,TVS,IUS_paper,IUS_deploy,IUS_geo,n_features,stability,prec@20%,recall@20%,cv_mean,cv_std,selected
+0.0,True,82.31,79.37,79.37,0.88,0.88,1.0,69.849,69.849,88.726,15,1.0,0.269,0.35,80.9,4.14,studytime|schoolsup|famsup|paid|activities|nursery|higher|internet|romantic|famrel|freetime|goout|Dalc|Walc|health
+0.25,False,82.31,77.56,77.56,0.88,0.88,1.0,68.257,68.257,88.047,15,1.0,0.231,0.3,81.24,3.05,higher|studytime|internet|romantic|schoolsup|nursery|famsup|activities|paid|Dalc|freetime|Walc|goout|famrel|health
+0.5,False,82.31,79.37,79.37,0.833,0.833,1.0,66.145,66.145,87.129,15,0.867,0.269,0.35,83.32,3.33,higher|studytime|internet|romantic|schoolsup|nursery|famsup|activities|paid|failures|Dalc|freetime|Walc|goout|famrel
+0.75,False,78.46,76.85,76.85,0.72,0.72,1.0,55.33,55.33,82.096,15,0.756,0.192,0.25,85.18,3.8,failures|higher|school|studytime|Dalc|freetime|internet|romantic|Walc|schoolsup|goout|nursery|famsup|age|activities
+1.0,False,80.0,78.5,78.5,0.32,0.32,1.0,25.12,25.12,63.097,15,0.507,0.231,0.3,83.22,3.74,failures|school|higher|age|Medu|Dalc|Fedu|reason_reputation|studytime|freetime|Walc|goout|famsize|traveltime|reason_course
