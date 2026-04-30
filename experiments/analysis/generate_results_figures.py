@@ -20,13 +20,17 @@ name in the search path):
         with dataset ∈ {math, portuguese} and k ∈ {5, 7, 10, 15}.
 
 OUTPUT — manuscript/figures/results/{dataset}/...
-    fig_R1_method_horizon_k{k}.{pdf,png}    one per k for UCI
+    fig_R1_method_vs_budget[_{dataset}].{pdf,png}
+                                            ONE figure per dataset: IC-FS
+                                            variants as lines across k, baselines
+                                            as horizontal reference lines at their
+                                            own n_features (value annotated).
     fig_R2_dre_leakage.{pdf,png}            OULAD only
     fig_R3_alpha_sweep_k{k}.{pdf,png}       one per k for UCI
     fig_R4_stability_perf_k{k}.{pdf,png}    one per k for UCI
-    fig_R5_budget_sweep.{pdf,png}           NEW — IUS_deploy vs k for each h
-    fig_R6_cross_dataset_summary.{pdf,png}  NEW — OULAD vs UCI overlay
-    fig_R7_alpha_search_value.{pdf,png}     NEW — full minus HardFilter+DE-FS
+    fig_R5_budget_sweep.{pdf,png}           IUS_deploy vs k (IC-FS variants only)
+    fig_R6_cross_dataset_summary.{pdf,png}  OULAD vs UCI overlay
+    fig_R7_alpha_search_value.{pdf,png}     full minus HardFilter+DE-FS
 
 Typography: Times-style serif font, Wong colour-blind safe palette.
 
@@ -55,6 +59,8 @@ from typing import List, Optional
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 from matplotlib.ticker import MultipleLocator
 
 # --------------------------------------------------------------------
@@ -86,7 +92,7 @@ C_BLUE    = "#0072B2"
 C_ORANGE  = "#D55E00"
 C_GREEN   = "#009E73"
 C_PINK    = "#CC79A7"
-C_YELLOW  = "#F0E442"
+C_YELLOW  = "#E6AC00"
 C_SKY     = "#56B4E9"
 C_GREY    = "#666666"
 C_BLACK   = "#222222"
@@ -102,6 +108,22 @@ ALPHA_GRID = [0.0, 0.25, 0.5, 0.75, 1.0]
 OULAD_K    = 15
 UCI_K_GRID = [5, 7, 10, 15]
 
+_ICFS = [
+    ("IUS_deploy_full",     "IC-FS (full)",           C_BLUE,   "-",  "o"),
+    ("IUS_deploy_noTemp",   "IC-FS (−temporal)",       C_ORANGE, "--", "s"),
+    ("IUS_deploy_noAction", "IC-FS (−actionability)",  C_PINK,   ":",  "^"),
+    ("IUS_deploy_hardDEFS", "HardFilter+DE-FS",        C_GREEN,  "-.", "D"),
+]
+ 
+# Baselines: (method name in CSV, label, colour, marker)
+_BASELINES = [
+    ("NSGA-II-MOFS",       "NSGA-II",    C_SKY,    "P"),
+    ("StabilitySelection", "Stab. Sel.", C_YELLOW,  "X"),
+    ("Boruta",             "Boruta",     C_GREY,    "*"),
+]
+ 
+_HORIZONS   = [0, 1, 2]
+_UCI_K_GRID = [5, 7, 10, 15]
 
 def setup_paths(dataset: str = "oulad"):
     """
@@ -132,7 +154,190 @@ def _dataset_short(dataset: str) -> str:
     if dataset == "uci_portuguese":   return "portuguese"
     raise ValueError(dataset)
 
+def _short(dataset: str) -> str:
+    return {"oulad": "oulad",
+            "uci_math": "math",
+            "uci_portuguese": "portuguese"}[dataset]
+ 
+ 
+def _pretty(dataset: str) -> str:
+    return {"oulad": "OULAD",
+            "uci_math": "UCI Math",
+            "uci_portuguese": "UCI Portuguese"}[dataset]
+ 
+ 
+def _load_stat8(dataset, results_dir, k, h):
+    short = _short(dataset)
+    p = (results_dir / f"k{k}" / f"stat8_oulad_h{h}_k{k}.csv"
+         if dataset == "oulad"
+         else results_dir / f"k{k}" / f"stat8_uci_{short}_h{h}_k{k}.csv")
+    return pd.read_csv(p) if p.exists() else pd.DataFrame()
 
+def _load_baselines(dataset, results_dir, h):
+    short = _short(dataset)
+    p = (results_dir / f"baselines_oulad_h{h}.csv"
+         if dataset == "oulad"
+         else results_dir / f"baselines_uci_{short}_h{h}.csv")
+    return pd.read_csv(p) if p.exists() else pd.DataFrame()
+
+# ── Core figure ──────────────────────────────────────────────────────────────
+ 
+def _fig_method_vs_budget(dataset, results_dir, outdir, k_list):
+    fig, axes = plt.subplots(
+        1, 3,
+        figsize=(10.8, 3.5),
+        sharey=False,
+        gridspec_kw=dict(wspace=0.42),
+    )
+ 
+    x_min = min(k_list) - 1.5
+    x_max = max(k_list) + 1.5
+ 
+    for ax, h in zip(axes, _HORIZONS):
+ 
+        # ── 1. IC-FS variant lines across k ───────────────────────────
+        for col, label, colour, ls, mk in _ICFS:
+            ks, means, stds = [], [], []
+            for k in k_list:
+                df = _load_stat8(dataset, results_dir, k, h)
+                if df.empty or col not in df.columns:
+                    continue
+                v = df[col].dropna().to_numpy()
+                if len(v) == 0:
+                    continue
+                ks.append(k)
+                means.append(v.mean())
+                stds.append(v.std(ddof=1) if len(v) > 1 else 0.0)
+ 
+            if not ks:
+                continue
+ 
+            ks    = np.array(ks,    dtype=float)
+            means = np.array(means, dtype=float)
+            stds  = np.array(stds,  dtype=float)
+ 
+            ax.plot(ks, means,
+                    color=colour, linestyle=ls, marker=mk,
+                    linewidth=1.7, markersize=5.5,
+                    label=label, zorder=4)
+            ax.fill_between(ks, means - stds, means + stds,
+                            color=colour, alpha=0.11,
+                            linewidth=0, zorder=3)
+ 
+        # ── 2. Baselines: horizontal reference lines ───────────────────
+        df_base = _load_baselines(dataset, results_dir, h)
+ 
+        if not df_base.empty and "method" in df_base.columns:
+            for method_name, label, colour, mk in _BASELINES:
+                row = df_base[df_base["method"] == method_name]
+                if row.empty:
+                    continue
+ 
+                k_actual   = float(row["n_features"].iloc[0])
+                ius_actual = float(row["IUS_deploy"].iloc[0])
+ 
+                # Horizontal dashed line spanning full x-range
+                ax.axhline(
+                    y=ius_actual,
+                    color=colour,
+                    linestyle=(0, (4, 3)),   # custom dash: 4pt on, 3pt off
+                    linewidth=1.3,
+                    alpha=0.85,
+                    zorder=2,
+                    label=label,
+                )
+ 
+                # Filled marker at the baseline's actual k
+                ax.scatter(
+                    [k_actual], [ius_actual],
+                    color=colour, marker=mk,
+                    s=90, zorder=6,
+                    edgecolors="white", linewidths=0.8,
+                )
+ 
+                # IUS value annotated at the right edge of the line
+                # Format: "62.5  (k=7)"  — two pieces of info in one label
+                ax.text(
+                    x_max - 0.05,              # just inside right border
+                    ius_actual,
+                    f"{ius_actual:.1f}  (k={int(k_actual)})",
+                    color=colour,
+                    fontsize=6.5,
+                    va="center",
+                    ha="right",
+                    zorder=7,
+                    # white halo so text is legible over grid lines
+                    bbox=dict(boxstyle="round,pad=0.1",
+                              fc="white", ec="none", alpha=0.7),
+                )
+ 
+        # ── 3. Cosmetics ───────────────────────────────────────────────
+        ax.set_title(f"$h = {h}$", fontsize=9)
+        ax.set_xlabel("Feature budget $k$", fontsize=8.5)
+        if h == 0:
+            ax.set_ylabel(r"$\mathrm{IUS}_{\mathrm{deploy}}$", fontsize=8.5)
+ 
+        ax.set_xticks(k_list)
+        ax.set_xlim(x_min, x_max)
+        ax.set_ylim(bottom=0)
+        ax.yaxis.set_major_locator(MultipleLocator(10))
+        ax.grid(True, linewidth=0.4, alpha=0.35, zorder=0)
+        ax.set_axisbelow(True)
+ 
+    # ── 4. Shared legend (outside right panel) ─────────────────────────
+    icfs_handles = [
+        Line2D([0], [0], color=col, linestyle=ls, marker=mk,
+               linewidth=1.5, markersize=5.5, label=lbl)
+        for _, lbl, col, ls, mk in _ICFS
+    ]
+ 
+    # Separator between two groups
+    sep = Line2D([0], [0], color="none", label="— baselines (fixed own k) —")
+ 
+    baseline_handles = [
+        Line2D([0], [0],
+               color=col,
+               linestyle=(0, (4, 3)),
+               linewidth=1.3,
+               marker=mk,
+               markersize=6.5,
+               markeredgecolor="white",
+               markeredgewidth=0.8,
+               label=lbl)
+        for _, lbl, col, mk in _BASELINES
+    ]
+ 
+    # Explain the right-edge annotation
+    note = Line2D([0], [0], color="none",
+                  label="(value & k shown at right edge →)")
+ 
+    axes[-1].legend(
+        handles=icfs_handles + [sep] + baseline_handles + [note],
+        loc="upper left",
+        bbox_to_anchor=(1.03, 1.0),
+        frameon=False,
+        fontsize=7.5,
+        handlelength=2.8,
+        labelspacing=0.55,
+    )
+ 
+    fig.suptitle(
+        f"{_pretty(dataset)} — "
+        r"$\mathrm{IUS}_{\mathrm{deploy}}$ vs. feature budget $k$  "
+        r"(IC-FS: lines ± 1σ;   baselines: dashed reference)",
+        fontsize=9, y=1.03,
+    )
+ 
+    # ── 5. Save ────────────────────────────────────────────────────────
+    short = _short(dataset)
+    stem  = ("fig_R1_method_vs_budget" if dataset == "oulad"
+             else f"fig_R1_method_vs_budget_{short}")
+    for ext in ("pdf", "png"):
+        fig.savefig(outdir / f"{stem}.{ext}", bbox_inches="tight", dpi=300)
+    plt.close(fig)
+    print(f"  [fig_R1] Saved → {outdir / stem}.pdf / .png")
+ 
+ 
 # --------------------------------------------------------------------
 # Data loaders — dataset- and budget-aware
 # --------------------------------------------------------------------
@@ -187,72 +392,39 @@ def load_baselines(dataset: str, results_dir: Path, h: int) -> pd.DataFrame:
 # --------------------------------------------------------------------
 # FIGURE R1 — IUS_deploy across method × horizon at one budget k
 # --------------------------------------------------------------------
-def fig_method_horizon_comparison(dataset: str, results_dir: Path,
-                                   outdir: Path, k: int) -> None:
-    """Grouped bar chart: IUS_deploy mean ± std across 7 methods × 3 horizons."""
-    methods = [
-        ("IC-FS\n(full)",     "IUS_deploy_full",     "stat8",    C_BLUE),
-        ("--temporal",        "IUS_deploy_noTemp",   "stat8",    C_ORANGE),
-        ("--action.",         "IUS_deploy_noAction", "stat8",    C_PINK),
-        ("HardFilt.\n+DE-FS", "IUS_deploy_hardDEFS", "stat8",    C_GREEN),
-        ("NSGA-II",           "IUS_deploy",          "baseline", C_SKY),
-        ("Boruta",            "IUS_deploy",          "baseline", C_YELLOW),
-        ("Stab.\nSel.",       "IUS_deploy",          "baseline", C_GREY),
-    ]
-    baseline_method_names = {"NSGA-II":  "NSGA-II-MOFS",
-                              "Boruta":   "Boruta",
-                              "Stab.\nSel.": "StabilitySelection"}
-
-    means = np.zeros((len(methods), len(HORIZONS)))
-    stds  = np.zeros_like(means)
-
-    for j, h in enumerate(HORIZONS):
-        df_stat = load_stat8(dataset, results_dir, k, h)
-        df_base = load_baselines(dataset, results_dir, h)
-        for i, (label, col, src, _) in enumerate(methods):
-            if src == "stat8":
-                if not df_stat.empty and col in df_stat.columns:
-                    vals = df_stat[col].to_numpy()
-                    means[i, j] = vals.mean()
-                    stds[i, j]  = vals.std(ddof=1)
-            else:
-                if not df_base.empty and "method" in df_base.columns:
-                    base_name = baseline_method_names[label]
-                    row = df_base[df_base["method"] == base_name]
-                    means[i, j] = row[col].iloc[0] if len(row) else np.nan
-                    stds[i, j]  = 0.0
-
-    fig, ax = plt.subplots(figsize=(7.0, 3.2))
-    bar_w     = 0.11
-    n_methods = len(methods)
-    x         = np.arange(len(HORIZONS))
-
-    for i, (label, _, _, colour) in enumerate(methods):
-        offset = (i - (n_methods - 1) / 2) * bar_w
-        ax.bar(x + offset, means[i], width=bar_w, yerr=stds[i],
-               capsize=2.0, error_kw=dict(elinewidth=0.6),
-               color=colour, edgecolor="white", linewidth=0.4, label=label)
-
-    ax.set_xticks(x)
-    ax.set_xticklabels([f"$h={h}$" for h in HORIZONS])
-    ax.set_xlabel("Prediction horizon")
-    ax.set_ylabel(r"$\mathrm{IUS}_{\mathrm{deploy}}$")
-    ax.yaxis.set_major_locator(MultipleLocator(10))
-
-    # Set y-limit dynamically
-    ymax = float(np.nanmax(means + stds)) if not np.all(np.isnan(means)) else 80
-    ax.set_ylim(0, max(75, ymax * 1.15))
-
-    ax.set_title(f"{_pretty_dataset_name(dataset)} — feature budget $k = {k}$")
-    ax.legend(ncol=4, loc="upper left", frameon=False,
-               columnspacing=1.2, handletextpad=0.5,
-               bbox_to_anchor=(0.0, 1.18))
-
-    fig.tight_layout()
-    suffix = f"_k{k}" if dataset != "oulad" else ""
-    for ext in ("pdf", "png"):
-        fig.savefig(outdir / f"fig_R1_method_horizon{suffix}.{ext}")
-    plt.close(fig)
+def fig_method_horizon_comparison(
+    dataset: str,
+    results_dir: Path,
+    outdir: Path,
+    k: int,          # kept for API compatibility; ignored internally
+) -> None:
+    """
+    Drop-in replacement for the old per-k grouped-bar-chart function.
+ 
+    The old loop in main() called this once per k; now every call produces
+    (or skips if already present) a single cross-k figure per dataset.
+    """
+    short  = _short(dataset)
+    stem   = ("fig_R1_method_vs_budget" if dataset == "oulad"
+              else f"fig_R1_method_vs_budget_{short}")
+    target = outdir / f"{stem}.pdf"
+ 
+    if target.exists():
+        print(f"  [fig_R1] Already generated → {target.name}  (skipping)")
+        return
+ 
+    # Auto-detect available k values from the file system
+    if dataset == "oulad":
+        found = sorted(
+            int(p.name[1:])
+            for p in results_dir.glob("k*")
+            if (p / f"stat8_oulad_h0_k{p.name[1:]}.csv").exists()
+        )
+        k_list = found if found else [15]
+    else:
+        k_list = _UCI_K_GRID
+ 
+    _fig_method_vs_budget(dataset, results_dir, outdir, k_list)
 
 
 def _pretty_dataset_name(dataset: str) -> str:
