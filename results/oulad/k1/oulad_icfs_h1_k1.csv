@@ -1,0 +1,6 @@
+alpha,nested_best,accuracy,f1_paper,f1_deploy,AR,AR_available,TVS,IUS_paper,IUS_deploy,IUS_geo,n_features,stability,prec@20%,recall@20%,cv_mean,cv_std,selected
+0.0,True,51.74,51.69,51.69,1.0,1.0,1.0,51.691,51.691,80.255,1,1.0,0.571,0.216,51.74,0.64,date_registration
+0.25,False,51.74,51.69,51.69,1.0,1.0,1.0,51.691,51.691,80.255,1,1.0,0.571,0.216,51.74,0.64,date_registration
+0.5,False,71.81,70.83,70.83,0.7,0.7,1.0,49.578,49.578,79.146,1,1.0,0.903,0.342,70.05,0.89,assessment_on_time_rate
+0.75,False,71.81,70.83,70.83,0.7,0.7,1.0,49.578,49.578,79.146,1,1.0,0.903,0.342,70.05,0.89,assessment_on_time_rate
+1.0,False,74.05,73.74,73.74,0.0,0.0,1.0,0.0,0.0,0.0,1,0.479,0.936,0.354,73.22,1.07,score_TMA1

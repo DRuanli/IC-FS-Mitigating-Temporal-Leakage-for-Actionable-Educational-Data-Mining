@@ -1,0 +1,6 @@
+alpha,nested_best,accuracy,f1_paper,f1_deploy,AR,AR_available,TVS,IUS_paper,IUS_deploy,IUS_geo,n_features,stability,prec@20%,recall@20%,cv_mean,cv_std,selected
+0.0,True,51.74,51.69,51.69,1.0,1.0,1.0,51.691,51.691,80.255,1,1.0,0.571,0.216,51.74,0.64,date_registration
+0.25,False,51.74,51.69,51.69,1.0,1.0,1.0,51.691,51.691,80.255,1,1.0,0.571,0.216,51.74,0.64,date_registration
+0.5,False,51.74,51.69,51.69,1.0,1.0,1.0,51.691,51.691,80.255,1,1.0,0.571,0.216,51.74,0.64,date_registration
+0.75,False,51.74,51.69,51.69,1.0,1.0,1.0,51.691,51.691,80.255,1,1.0,0.571,0.216,51.74,0.64,date_registration
+1.0,False,56.31,55.99,55.99,0.0,0.0,1.0,0.0,0.0,0.0,1,0.9,0.621,0.235,55.79,1.07,highest_education_Lower Than A Level

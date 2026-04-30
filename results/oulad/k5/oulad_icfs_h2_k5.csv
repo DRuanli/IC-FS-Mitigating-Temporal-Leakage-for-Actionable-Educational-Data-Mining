@@ -1,0 +1,6 @@
+alpha,nested_best,accuracy,f1_paper,f1_deploy,AR,AR_available,TVS,IUS_paper,IUS_deploy,IUS_geo,n_features,stability,prec@20%,recall@20%,cv_mean,cv_std,selected
+0.0,False,75.61,75.63,75.63,0.76,0.76,1.0,57.478,57.478,83.145,5,1.0,0.971,0.368,74.5,0.98,date_registration|sum_click_to_date|days_active_to_date|n_distinct_activities|forum_clicks
+0.25,True,82.14,82.15,82.15,0.76,0.76,1.0,62.434,62.434,85.469,5,1.0,0.994,0.376,81.1,1.08,date_registration|assessment_submitted_count|days_active_to_date|click_intensity_last_7d|assessment_on_time_rate
+0.5,False,81.93,81.93,81.93,0.7,0.7,1.0,57.354,57.354,83.085,5,1.0,0.989,0.374,81.22,0.86,assessment_submitted_count|days_active_to_date|click_intensity_last_7d|assessment_on_time_rate|sum_click_to_date
+0.75,False,83.29,83.31,83.31,0.56,0.56,1.0,46.651,46.651,77.557,5,1.0,0.988,0.374,82.86,0.97,score_TMA2|assessment_submitted_count|days_active_to_date|click_intensity_last_7d|assessment_on_time_rate
+1.0,False,85.29,85.3,85.3,0.42,0.42,1.0,35.826,35.826,71.023,5,0.839,0.995,0.377,84.29,0.91,score_TMA2|assessment_submitted_count|weighted_assessment_score_to_date|days_active_to_date|click_intensity_last_7d

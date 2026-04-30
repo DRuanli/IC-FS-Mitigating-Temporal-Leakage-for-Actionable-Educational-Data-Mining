@@ -19,6 +19,10 @@ name in the search path):
     results/uci/{dataset}/baselines_uci_{dataset}_h{0,1,2}.csv
         with dataset ∈ {math, portuguese} and k ∈ {5, 7, 10, 15}.
 
+INPUT — Omega sensitivity (produced by run_omega_sensitivity.py scripts):
+    results/oulad/omega_sensitivity_all_horizons.csv
+    results/uci/{dataset}/omega_sensitivity_{dataset}_all_horizons.csv
+
 OUTPUT — manuscript/figures/results/{dataset}/...
     fig_R1_method_vs_budget[_{dataset}].{pdf,png}
                                             ONE figure per dataset: IC-FS
@@ -31,6 +35,11 @@ OUTPUT — manuscript/figures/results/{dataset}/...
     fig_R5_budget_sweep.{pdf,png}           IUS_deploy vs k (IC-FS variants only)
     fig_R6_cross_dataset_summary.{pdf,png}  OULAD vs UCI overlay
     fig_R7_alpha_search_value.{pdf,png}     full minus HardFilter+DE-FS
+    fig_R8_omega_sensitivity[_dataset].{pdf,png}
+                                            w₂ sensitivity — single dataset
+                                            (1 row × 3 panels: h=0,h=1,h=2)
+    fig_R8_omega_sensitivity_all.{pdf,png}  w₂ sensitivity — 3×3 grid
+                                            (rows=datasets, cols=horizons)
 
 Typography: Times-style serif font, Wong colour-blind safe palette.
 
@@ -47,6 +56,12 @@ Usage:
 
     # Single budget for UCI
     python experiments/analysis/generate_results_figures.py --dataset uci_math --k 10
+
+    # Omega (w₂) sensitivity — single dataset
+    python experiments/analysis/generate_results_figures.py --dataset uci_math --omega-sensitivity
+
+    # Omega sensitivity — all-datasets 3×3 grid
+    python experiments/analysis/generate_results_figures.py --cross-dataset --omega-sensitivity
 ====================================================================
 """
 
@@ -105,8 +120,8 @@ ROOT       = Path(__file__).resolve().parents[2] if "__file__" in globals() else
 HORIZONS   = [0, 1, 2]
 ALPHA_GRID = [0.0, 0.25, 0.5, 0.75, 1.0]
 
-OULAD_K    = 15
-UCI_K_GRID = [5, 7, 10, 15]
+OULAD_K    = 7
+UCI_K_GRID = [1, 5, 7, 10, 15]
 
 _ICFS = [
     ("IUS_deploy_full",     "IC-FS (full)",           C_BLUE,   "-",  "o"),
@@ -114,16 +129,33 @@ _ICFS = [
     ("IUS_deploy_noAction", "IC-FS (−actionability)",  C_PINK,   ":",  "^"),
     ("IUS_deploy_hardDEFS", "HardFilter+DE-FS",        C_GREEN,  "-.", "D"),
 ]
- 
+
 # Baselines: (method name in CSV, label, colour, marker)
 _BASELINES = [
     ("NSGA-II-MOFS",       "NSGA-II",    C_SKY,    "P"),
     ("StabilitySelection", "Stab. Sel.", C_YELLOW,  "X"),
     ("Boruta",             "Boruta",     C_GREY,    "*"),
 ]
- 
+
 _HORIZONS   = [0, 1, 2]
 _UCI_K_GRID = [5, 7, 10, 15]
+_OULAD_K_GRID = [1, 5, 7, 10, 15]
+
+# Omega sensitivity: method → (colour, linestyle, marker)
+_OMEGA_METHOD_STYLE = {
+    "IC-FS(full)":        (C_BLUE,   "-",       "o"),
+    "NSGA-II-MOFS":       (C_SKY,    (0,(4,3)), "P"),
+    "StabilitySelection": (C_YELLOW, (0,(4,3)), "X"),
+    "Boruta":             (C_GREY,   (0,(4,3)), "*"),
+}
+_OMEGA_METHOD_LABEL = {
+    "IC-FS(full)":        "IC-FS (full)",
+    "NSGA-II-MOFS":       "NSGA-II",
+    "StabilitySelection": "Stab. Sel.",
+    "Boruta":             "Boruta",
+}
+_OMEGA_W2_GRID = [0.3, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+_PAPER_W2      = 0.7
 
 def setup_paths(dataset: str = "oulad"):
     """
@@ -158,14 +190,14 @@ def _short(dataset: str) -> str:
     return {"oulad": "oulad",
             "uci_math": "math",
             "uci_portuguese": "portuguese"}[dataset]
- 
- 
+
+
 def _pretty(dataset: str) -> str:
     return {"oulad": "OULAD",
             "uci_math": "UCI Math",
             "uci_portuguese": "UCI Portuguese"}[dataset]
- 
- 
+
+
 def _load_stat8(dataset, results_dir, k, h):
     short = _short(dataset)
     p = (results_dir / f"k{k}" / f"stat8_oulad_h{h}_k{k}.csv"
@@ -181,7 +213,7 @@ def _load_baselines(dataset, results_dir, h):
     return pd.read_csv(p) if p.exists() else pd.DataFrame()
 
 # ── Core figure ──────────────────────────────────────────────────────────────
- 
+
 def _fig_method_vs_budget(dataset, results_dir, outdir, k_list):
     fig, axes = plt.subplots(
         1, 3,
@@ -189,33 +221,35 @@ def _fig_method_vs_budget(dataset, results_dir, outdir, k_list):
         sharey=False,
         gridspec_kw=dict(wspace=0.42),
     )
- 
+
     x_min = min(k_list) - 1.5
     x_max = max(k_list) + 1.5
- 
+
     for ax, h in zip(axes, _HORIZONS):
- 
+
         # ── 1. IC-FS variant lines across k ───────────────────────────
         for col, label, colour, ls, mk in _ICFS:
             ks, means, stds = [], [], []
             for k in k_list:
                 df = _load_stat8(dataset, results_dir, k, h)
                 if df.empty or col not in df.columns:
+                    print("error")
                     continue
                 v = df[col].dropna().to_numpy()
                 if len(v) == 0:
+                    print("error v")
                     continue
                 ks.append(k)
                 means.append(v.mean())
                 stds.append(v.std(ddof=1) if len(v) > 1 else 0.0)
- 
+
             if not ks:
                 continue
- 
+
             ks    = np.array(ks,    dtype=float)
             means = np.array(means, dtype=float)
             stds  = np.array(stds,  dtype=float)
- 
+
             ax.plot(ks, means,
                     color=colour, linestyle=ls, marker=mk,
                     linewidth=1.7, markersize=5.5,
@@ -223,19 +257,19 @@ def _fig_method_vs_budget(dataset, results_dir, outdir, k_list):
             ax.fill_between(ks, means - stds, means + stds,
                             color=colour, alpha=0.11,
                             linewidth=0, zorder=3)
- 
+
         # ── 2. Baselines: horizontal reference lines ───────────────────
         df_base = _load_baselines(dataset, results_dir, h)
- 
+
         if not df_base.empty and "method" in df_base.columns:
             for method_name, label, colour, mk in _BASELINES:
                 row = df_base[df_base["method"] == method_name]
                 if row.empty:
                     continue
- 
+
                 k_actual   = float(row["n_features"].iloc[0])
                 ius_actual = float(row["IUS_deploy"].iloc[0])
- 
+
                 # Horizontal dashed line spanning full x-range
                 ax.axhline(
                     y=ius_actual,
@@ -246,7 +280,7 @@ def _fig_method_vs_budget(dataset, results_dir, outdir, k_list):
                     zorder=2,
                     label=label,
                 )
- 
+
                 # Filled marker at the baseline's actual k
                 ax.scatter(
                     [k_actual], [ius_actual],
@@ -254,11 +288,10 @@ def _fig_method_vs_budget(dataset, results_dir, outdir, k_list):
                     s=90, zorder=6,
                     edgecolors="white", linewidths=0.8,
                 )
- 
+
                 # IUS value annotated at the right edge of the line
-                # Format: "62.5  (k=7)"  — two pieces of info in one label
                 ax.text(
-                    x_max - 0.05,              # just inside right border
+                    x_max - 0.05,
                     ius_actual,
                     f"{ius_actual:.1f}  (k={int(k_actual)})",
                     color=colour,
@@ -266,34 +299,32 @@ def _fig_method_vs_budget(dataset, results_dir, outdir, k_list):
                     va="center",
                     ha="right",
                     zorder=7,
-                    # white halo so text is legible over grid lines
                     bbox=dict(boxstyle="round,pad=0.1",
                               fc="white", ec="none", alpha=0.7),
                 )
- 
+
         # ── 3. Cosmetics ───────────────────────────────────────────────
         ax.set_title(f"$h = {h}$", fontsize=9)
         ax.set_xlabel("Feature budget $k$", fontsize=8.5)
         if h == 0:
             ax.set_ylabel(r"$\mathrm{IUS}_{\mathrm{deploy}}$", fontsize=8.5)
- 
+
         ax.set_xticks(k_list)
         ax.set_xlim(x_min, x_max)
         ax.set_ylim(bottom=0)
         ax.yaxis.set_major_locator(MultipleLocator(10))
         ax.grid(True, linewidth=0.4, alpha=0.35, zorder=0)
         ax.set_axisbelow(True)
- 
+
     # ── 4. Shared legend (outside right panel) ─────────────────────────
     icfs_handles = [
         Line2D([0], [0], color=col, linestyle=ls, marker=mk,
                linewidth=1.5, markersize=5.5, label=lbl)
         for _, lbl, col, ls, mk in _ICFS
     ]
- 
-    # Separator between two groups
+
     sep = Line2D([0], [0], color="none", label="— baselines (fixed own k) —")
- 
+
     baseline_handles = [
         Line2D([0], [0],
                color=col,
@@ -306,11 +337,10 @@ def _fig_method_vs_budget(dataset, results_dir, outdir, k_list):
                label=lbl)
         for _, lbl, col, mk in _BASELINES
     ]
- 
-    # Explain the right-edge annotation
+
     note = Line2D([0], [0], color="none",
                   label="(value & k shown at right edge →)")
- 
+
     axes[-1].legend(
         handles=icfs_handles + [sep] + baseline_handles + [note],
         loc="upper left",
@@ -320,14 +350,14 @@ def _fig_method_vs_budget(dataset, results_dir, outdir, k_list):
         handlelength=2.8,
         labelspacing=0.55,
     )
- 
+
     fig.suptitle(
         f"{_pretty(dataset)} — "
         r"$\mathrm{IUS}_{\mathrm{deploy}}$ vs. feature budget $k$  "
         r"(IC-FS: lines ± 1σ;   baselines: dashed reference)",
         fontsize=9, y=1.03,
     )
- 
+
     # ── 5. Save ────────────────────────────────────────────────────────
     short = _short(dataset)
     stem  = ("fig_R1_method_vs_budget" if dataset == "oulad"
@@ -336,8 +366,8 @@ def _fig_method_vs_budget(dataset, results_dir, outdir, k_list):
         fig.savefig(outdir / f"{stem}.{ext}", bbox_inches="tight", dpi=300)
     plt.close(fig)
     print(f"  [fig_R1] Saved → {outdir / stem}.pdf / .png")
- 
- 
+
+
 # --------------------------------------------------------------------
 # Data loaders — dataset- and budget-aware
 # --------------------------------------------------------------------
@@ -389,6 +419,23 @@ def load_baselines(dataset: str, results_dir: Path, h: int) -> pd.DataFrame:
     return pd.read_csv(path)
 
 
+def load_omega_sensitivity(dataset: str, results_dir: Path) -> pd.DataFrame:
+    """
+    Load pre-computed omega (w₂) sensitivity CSV for a dataset.
+    Produced by:
+      experiments/oulad/run_omega_sensitivity.py
+      experiments/uci/run_omega_sensitivity.py
+    """
+    short = _dataset_short(dataset)
+    if dataset == "oulad":
+        p = results_dir /"omega_sensitivity"/"omega_sensitivity_all_horizons_oulad_k5.csv"
+    else:
+        p = results_dir / f"omega_sensitivity_{short}_all_horizons.csv"
+    if not p.exists():
+        return pd.DataFrame()
+    return pd.read_csv(p)
+
+
 # --------------------------------------------------------------------
 # FIGURE R1 — IUS_deploy across method × horizon at one budget k
 # --------------------------------------------------------------------
@@ -400,7 +447,7 @@ def fig_method_horizon_comparison(
 ) -> None:
     """
     Drop-in replacement for the old per-k grouped-bar-chart function.
- 
+
     The old loop in main() called this once per k; now every call produces
     (or skips if already present) a single cross-k figure per dataset.
     """
@@ -408,11 +455,11 @@ def fig_method_horizon_comparison(
     stem   = ("fig_R1_method_vs_budget" if dataset == "oulad"
               else f"fig_R1_method_vs_budget_{short}")
     target = outdir / f"{stem}.pdf"
- 
+
     if target.exists():
         print(f"  [fig_R1] Already generated → {target.name}  (skipping)")
         return
- 
+
     # Auto-detect available k values from the file system
     if dataset == "oulad":
         found = sorted(
@@ -420,10 +467,10 @@ def fig_method_horizon_comparison(
             for p in results_dir.glob("k*")
             if (p / f"stat8_oulad_h0_k{p.name[1:]}.csv").exists()
         )
-        k_list = found if found else [15]
+        k_list = _OULAD_K_GRID
     else:
         k_list = _UCI_K_GRID
- 
+
     _fig_method_vs_budget(dataset, results_dir, outdir, k_list)
 
 
@@ -474,7 +521,7 @@ def fig_dre_leakage_diagnostic(dataset: str, results_dir: Path,
     ax_a.set_xticks(x)
     ax_a.set_xticklabels(["IC-FS (full)", "IC-FS (--temporal)"])
     ax_a.set_ylabel(r"Intervention Utility Score")
-    ax_a.set_title(r"(a) Conventional vs deployment-realistic eval ($h=0$)")
+    ax_a.set_title(f"(k={k}) Conventional vs deployment-realistic eval ($h=0$)")
     ax_a.legend(loc="upper left", frameon=False)
 
     gap = means_paper[1] - means_deploy[1]
@@ -493,12 +540,12 @@ def fig_dre_leakage_diagnostic(dataset: str, results_dir: Path,
     ax_b.set_xticklabels(["IC-FS (full)", "--temporal"])
     ax_b.set_ylabel(r"Leakage coefficient $\tau$")
     ax_b.set_ylim(0, 1.0)
-    ax_b.set_title(r"(b) Leakage coefficient ($h=0$)")
+    ax_b.set_title(f"(k={k}) Leakage coefficient ($h=0$)")
     ax_b.axhline(0, color="#000", lw=0.5)
 
     fig.tight_layout()
     for ext in ("pdf", "png"):
-        fig.savefig(outdir / f"fig_R2_dre_leakage.{ext}")
+        fig.savefig(outdir / f"fig_R2_dre_leakage_{k}.{ext}")
     plt.close(fig)
 
 
@@ -555,7 +602,7 @@ def fig_alpha_sweep(dataset: str, results_dir: Path, outdir: Path, k: int) -> No
     fig.suptitle(f"{_pretty_dataset_name(dataset)} — feature budget $k = {k}$",
                   fontsize=9, y=1.02)
     fig.tight_layout()
-    suffix = f"_k{k}" if dataset != "oulad" else ""
+    suffix = f"_k{k}_{dataset}"
     for ext in ("pdf", "png"):
         fig.savefig(outdir / f"fig_R3_alpha_sweep{suffix}.{ext}")
     plt.close(fig)
@@ -603,34 +650,25 @@ def fig_stability_performance(dataset: str, results_dir: Path,
                   fontsize=8.5)
 
     fig.tight_layout()
-    suffix = f"_k{k}" if dataset != "oulad" else ""
+    suffix = f"_k{k}_{dataset}"
     for ext in ("pdf", "png"):
         fig.savefig(outdir / f"fig_R4_stability_perf{suffix}.{ext}")
     plt.close(fig)
 
-
-# --------------------------------------------------------------------
-# NEW FIGURE R5 — Budget sweep: IUS_deploy versus k for each horizon
-# --------------------------------------------------------------------
+# R5
 def fig_budget_sweep(dataset: str, results_dir: Path, outdir: Path,
                       k_list: List[int]) -> None:
-    """
-    For UCI: line plot of IC-FS(full), --action, HardFilter+DE-FS
-    versus feature budget k, one panel per horizon.
+    #if dataset == "oulad":
+     #   return
 
-    This figure motivates the §5 finding that the value of α-search
-    over hard filtering grows with k.
-    """
-    if dataset == "oulad":
-        # OULAD is run at k=15 only in the current pipeline; skip.
-        return
+    # Tăng nhẹ chiều cao để có chỗ cho legend
+    fig, axes = plt.subplots(1, 3, figsize=(7.4, 3.2), sharey=True)
 
-    fig, axes = plt.subplots(1, 3, figsize=(7.4, 2.8), sharey=True)
-
+    # --- Vẽ dữ liệu (giữ nguyên logic) ---
     for ax, h in zip(axes, HORIZONS):
-        ks_full,    ms_full,    ss_full    = [], [], []
-        ks_action,  ms_action,  ss_action  = [], [], []
-        ks_hard,    ms_hard,    ss_hard    = [], [], []
+        ks_full, ms_full, ss_full = [], [], []
+        ks_action, ms_action, ss_action = [], [], []
+        ks_hard, ms_hard, ss_hard = [], [], []
 
         for k in k_list:
             df = load_stat8(dataset, results_dir, k, h)
@@ -666,16 +704,32 @@ def fig_budget_sweep(dataset: str, results_dir: Path, outdir: Path,
         ax.set_ylim(0, 90)
         if h == 0:
             ax.set_ylabel(r"$\mathrm{IUS}_{\mathrm{deploy}}$")
-            ax.legend(loc="lower right", frameon=False, fontsize=7)
+            # Đã xóa ax.legend() ở đây
+
+    # --- Legend chung nằm ngang, phía dưới cùng ---
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels,
+               loc='lower center',
+               bbox_to_anchor=(0.5, -0.12),   # Điều chỉnh theo thử nghiệm
+               ncol=3,                         # Số cột = 3 (nằm ngang)
+               frameon=False,
+               fontsize=7)
+
+    # Điều chỉnh lề dưới để chứa legend
+    plt.subplots_adjust(bottom=0.2)
 
     fig.suptitle(f"{_pretty_dataset_name(dataset)} — IC-FS, ablation, and "
                   f"hard-filter baseline across feature budget",
                   fontsize=9, y=1.03)
     fig.tight_layout()
-    for ext in ("pdf", "png"):
-        fig.savefig(outdir / f"fig_R5_budget_sweep.{ext}")
-    plt.close(fig)
+    # Lưu ý: tight_layout() có thể phá vỡ lề đã điều chỉnh, nên gọi nó trước subplots_adjust?
+    # Cách an toàn: không dùng tight_layout() hoặc dùng bbox_inches='tight' khi savefig.
+    # Thay vào đó, dùng fig.tight_layout(rect=[0, 0.1, 1, 0.95]) để chừa khoảng dưới.
+    fig.tight_layout(rect=[0, 0.05, 1, 0.95])
 
+    for ext in ("pdf", "png"):
+        fig.savefig(outdir / f"fig_R5_budget_sweep_{dataset}.{ext}", bbox_inches='tight')
+    plt.close(fig)
 
 # --------------------------------------------------------------------
 # NEW FIGURE R6 — Cross-dataset summary (OULAD vs UCI Math vs UCI Por)
@@ -685,11 +739,6 @@ def fig_cross_dataset_summary(out_root: Path) -> None:
     Headline cross-dataset comparison: IC-FS(full) at the
     operationally-recommended budget per dataset, alongside three
     external baselines, separately for each horizon.
-
-    Recommended budgets:
-        OULAD k=15 (all horizons)
-        UCI Math k=5 at h=0, k=10 at h∈{1,2}
-        UCI Portuguese k=10 at all horizons
     """
     panels = [
         ("OULAD",            "oulad",          {0: 15, 1: 15, 2: 15}),
@@ -770,9 +819,6 @@ def fig_alpha_search_value(out_root: Path) -> None:
     """
     The headline new finding: Δ(IC-FS full minus HardFilter+DE-FS)
     across budget k, for each horizon and dataset.
-
-    Demonstrates that α-search adds value precisely when budget exceeds
-    Tier-1 supply.
     """
     panels = [
         ("UCI Math",         "uci_math",       UCI_K_GRID),
@@ -818,6 +864,208 @@ def fig_alpha_search_value(out_root: Path) -> None:
     print(f"  [fig_R7] Saved to {out}")
 
 
+# ====================================================================
+# NEW FIGURE R8 — w₂ sensitivity (single dataset, 1×3 panels)
+# ====================================================================
+
+def _draw_omega_panel(
+    ax: plt.Axes,
+    df: pd.DataFrame,
+    h: int,
+    show_ylabel: bool = False,
+    show_legend: bool = False,
+) -> None:
+    """
+    Draw one panel of the omega sensitivity figure.
+
+    One line per method; IC-FS(full) shown with ±1σ band (multi-seed).
+    Baselines shown as single-value lines (no band — single experiment seed).
+    Vertical dotted line marks the paper's choice w₂=0.7.
+    """
+    hdf = df[df["horizon"] == h].copy()
+    if hdf.empty:
+        ax.text(0.5, 0.5, "no data", transform=ax.transAxes,
+                ha="center", va="center", color=C_GREY, fontsize=8)
+        ax.set_title(f"$h = {h}$")
+        return
+
+    w2_vals = sorted(hdf["w2"].unique())
+    methods = sorted(hdf["method"].unique(),
+                     key=lambda m: (0 if m == "IC-FS(full)" else 1, m))
+
+    for method in methods:
+        style = _OMEGA_METHOD_STYLE.get(method, (C_GREY, "--", "o"))
+        colour, ls, mk = style
+        label = _OMEGA_METHOD_LABEL.get(method, method)
+
+        mdf = hdf[hdf["method"] == method]
+        means, stds = [], []
+        for w2 in w2_vals:
+            slc = mdf[np.isclose(mdf["w2"], w2)]["IUS_deploy"]
+            means.append(slc.mean() if len(slc) > 0 else np.nan)
+            stds.append(slc.std(ddof=1) if len(slc) > 1 else 0.0)
+
+        means = np.array(means)
+        stds  = np.array(stds)
+        valid = ~np.isnan(means)
+
+        ax.plot(np.array(w2_vals)[valid], means[valid],
+                color=colour, linestyle=ls, marker=mk,
+                linewidth=1.7, markersize=5.0,
+                label=label, zorder=4)
+
+        # ±1σ band only for IC-FS(full) (multi-seed — std is meaningful)
+        if method == "IC-FS(full)" and stds[valid].max() > 0:
+            ax.fill_between(
+                np.array(w2_vals)[valid],
+                (means - stds)[valid],
+                (means + stds)[valid],
+                color=colour, alpha=0.12, linewidth=0, zorder=3,
+            )
+
+    # Annotate paper's choice
+    ax.axvline(_PAPER_W2, color=C_BLACK, linewidth=0.9,
+               linestyle=":", zorder=5, alpha=0.7)
+    ax.text(_PAPER_W2 + 0.01, ax.get_ylim()[1] if ax.get_ylim()[1] > 0 else 1,
+            "$w_2 = 0.7$\n(paper)",
+            fontsize=6.5, color=C_BLACK, va="top", ha="left", alpha=0.7)
+
+    ax.set_title(f"$h = {h}$", fontsize=9)
+    ax.set_xlabel(r"Tier-2 actionability weight $w_2$", fontsize=8.5)
+    ax.set_xticks(w2_vals)
+    ax.set_xticklabels([f"{v:.1f}" for v in w2_vals], rotation=45, ha="right",
+                       fontsize=7)
+    ax.set_ylim(bottom=0)
+    ax.yaxis.set_major_locator(MultipleLocator(10))
+    ax.grid(True, linewidth=0.4, alpha=0.35, zorder=0)
+    ax.set_axisbelow(True)
+
+    if show_ylabel:
+        ax.set_ylabel(r"$\mathrm{IUS}_{\mathrm{deploy}}$", fontsize=8.5)
+    if show_legend:
+        ax.legend(loc="upper left", frameon=False, fontsize=7,
+                  handlelength=2.2, labelspacing=0.4)
+
+
+def fig_omega_sensitivity(
+    dataset: str,
+    results_dir: Path,
+    outdir: Path,
+) -> None:
+    """
+    FIGURE R8 (single-dataset variant) — w₂ sensitivity.
+
+    One row × 3 columns (h=0, h=1, h=2).
+    Shows IC-FS(full) ±1σ band + all baselines as functions of w₂.
+    Vertical line at w₂=0.7 (paper's choice).
+
+    Requires: results/{dataset}/omega_sensitivity_*_all_horizons.csv
+    Produced by:
+      experiments/oulad/run_omega_sensitivity.py
+      experiments/uci/run_omega_sensitivity.py
+    """
+    df = load_omega_sensitivity(dataset, results_dir)
+    if df.empty:
+        print(f"  [fig_R8] No omega sensitivity data for {dataset}. "
+              f"Run run_omega_sensitivity.py first.")
+        return
+
+    fig, axes = plt.subplots(1, 3, figsize=(10.5, 3.2),
+                              gridspec_kw=dict(wspace=0.38))
+
+    for ax_idx, (ax, h) in enumerate(zip(axes, HORIZONS)):
+        _draw_omega_panel(
+            ax, df, h,
+            show_ylabel=(ax_idx == 0),
+            show_legend=(ax_idx == 0),
+        )
+
+    short = _short(dataset)
+    fig.suptitle(
+        f"{_pretty(dataset)} — sensitivity of $\\mathrm{{IUS}}_{{\\mathrm{{deploy}}}}$"
+        r" to Tier-2 weight $w_2$  (IC-FS: line ± 1$\sigma$;  baselines: dashed)",
+        fontsize=9, y=1.03,
+    )
+    fig.tight_layout()
+
+    stem = f"fig_R8_omega_sensitivity_{short}"
+    for ext in ("pdf", "png"):
+        fig.savefig(outdir / f"{stem}.{ext}", bbox_inches="tight", dpi=300)
+    plt.close(fig)
+    print(f"  [fig_R8] Saved → {outdir / stem}.pdf / .png")
+
+
+# ====================================================================
+# NEW FIGURE R8 (all-datasets) — 3×3 grid: datasets × horizons
+# ====================================================================
+
+def fig_omega_sensitivity_all_datasets(out_root: Path) -> None:
+    """
+    FIGURE R8_all — w₂ sensitivity across all three datasets.
+
+    Layout: 3 rows (OULAD, UCI Math, UCI Portuguese) × 3 cols (h=0,1,2).
+    All panels share the same x-axis (w₂ grid) and colour scheme.
+
+    Allows direct cross-dataset comparison:
+      - Tier-2 sensitivity is highest when selection contains many Tier-2 features
+      - OULAD h=1,2 are most sensitive (clickstream features dominate)
+      - UCI h=0 is least sensitive (Tier-1 features dominate)
+    """
+    dataset_configs = [
+        ("oulad",       "OULAD"),
+        ("uci_math",    "UCI Math"),
+        ("uci_portuguese", "UCI Portuguese"),
+    ]
+
+    fig, axes = plt.subplots(
+        3, 3,
+        figsize=(10.5, 9.0),
+        gridspec_kw=dict(wspace=0.35, hspace=0.55),
+    )
+
+    for row_idx, (dataset, ds_label) in enumerate(dataset_configs):
+        results_dir, _ = setup_paths(dataset)
+        df = load_omega_sensitivity(dataset, results_dir)
+
+        for col_idx, h in enumerate(HORIZONS):
+            ax = axes[row_idx, col_idx]
+            if df.empty:
+                ax.text(0.5, 0.5, f"no data\n({dataset})",
+                        transform=ax.transAxes, ha="center", va="center",
+                        color=C_GREY, fontsize=7.5)
+                ax.set_title(f"{ds_label}  $h={h}$", fontsize=8.5)
+                continue
+
+            _draw_omega_panel(
+                ax, df, h,
+                show_ylabel=(col_idx == 0),
+                show_legend=(row_idx == 0 and col_idx == 0),
+            )
+            # Row label on left-most panel
+            if col_idx == 0:
+                ax.set_ylabel(
+                    f"{ds_label}\n" + r"$\mathrm{IUS}_{\mathrm{deploy}}$",
+                    fontsize=8,
+                )
+            # Horizon label as panel title
+            ax.set_title(f"$h = {h}$", fontsize=8.5)
+
+    fig.suptitle(
+        r"Sensitivity of $\mathrm{IUS}_{\mathrm{deploy}}$ to Tier-2 weight $w_2$"
+        "\n(rows: datasets;  cols: prediction horizons;  "
+        r"IC-FS: solid ± band;   baselines: dashed)",
+        fontsize=9, y=1.01,
+    )
+
+    out = out_root / "manuscript" / "figures" / "results" / "cross_dataset"
+    out.mkdir(parents=True, exist_ok=True)
+    for ext in ("pdf", "png"):
+        fig.savefig(out / f"fig_R8_omega_sensitivity_all.{ext}",
+                    bbox_inches="tight", dpi=300)
+    plt.close(fig)
+    print(f"  [fig_R8_all] Saved to {out}")
+
+
 # --------------------------------------------------------------------
 # Driver
 # --------------------------------------------------------------------
@@ -834,15 +1082,25 @@ def main() -> None:
                           help="UCI only — generate figures for k ∈ {5,7,10,15}.")
     parser.add_argument("--cross-dataset", action="store_true",
                           help="Generate fig_R6 and fig_R7 cross-dataset overlays.")
+    parser.add_argument("--omega-sensitivity", action="store_true",
+                          help="Generate fig_R8 w₂ sensitivity figure(s).  "
+                               "Combined with --cross-dataset: produces the "
+                               "3×3 all-datasets grid (fig_R8_omega_sensitivity_all). "
+                               "Otherwise: produces per-dataset 1×3 figure.")
     args = parser.parse_args()
 
+    # ── Cross-dataset figures (R6, R7, and optionally R8_all) ────────
     if args.cross_dataset:
-        print("[results-figures] Generating cross-dataset summary figures...")
+        print("[results-figures] Generating cross-dataset figures...")
         fig_cross_dataset_summary(ROOT)
         fig_alpha_search_value(ROOT)
+        if args.omega_sensitivity:
+            print("[results-figures] Generating omega sensitivity (all datasets 3×3)...")
+            fig_omega_sensitivity_all_datasets(ROOT)
         print("[results-figures] Done.")
         return
 
+    # ── Single-dataset figures ────────────────────────────────────────
     dataset = args.dataset.lower()
     if dataset not in ("oulad", "uci_math", "uci_portuguese"):
         raise ValueError(f"Unknown dataset: {dataset!r}")
@@ -869,10 +1127,15 @@ def main() -> None:
             fig_dre_leakage_diagnostic(dataset, results_dir, outdir, k)
 
     # UCI-specific budget-sweep figure
-    if dataset != "oulad":
+    if dataset == "oulad":
         print(f"\n[results-figures] Rendering budget sweep across "
               f"k ∈ {UCI_K_GRID}")
         fig_budget_sweep(dataset, results_dir, outdir, UCI_K_GRID)
+
+    # Omega sensitivity figure (per-dataset, 1×3 panels)
+    if args.omega_sensitivity:
+        print(f"\n[results-figures] Rendering omega sensitivity (w₂) figure...")
+        fig_omega_sensitivity(dataset, results_dir, outdir)
 
     print("\n[results-figures] Done. Generated:")
     for f in sorted(outdir.glob("fig_R*.pdf")):
